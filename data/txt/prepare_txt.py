@@ -4,111 +4,94 @@ import pandas as pd
 from tqdm import tqdm
 import chardet
 
-# Dictionnaire de conversion fourni
-meta = {
-    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, '/': 8, '-': 9},
-    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: '/', 9: '-'}
+# Configuration
+INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
+TRAIN_OUTPUT = "data/txt/train.bin"
+VAL_OUTPUT = "data/txt/val.bin"
+TRAIN_RATIO = 0.1
+VECTOR_SIZE = 36
+DTYPE = np.uint8
+
+# Dictionnaire de conversion
+META = {
+    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, '/': 8, '-': 9, '\n': 10},
+    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: '/', 9: '-', 10: '\n'}
 }
-dtype = np.uint8  # 32 tokens seulement dans le vocabulaire des LLMs pour les échecs
 
-# Chemin vers le fichier CSV local
-local_file_path = "data/txt/all_tic_tac_toe_games.csv"
-
-# Vérification de l'existence du fichier
-if not os.path.exists(local_file_path):
-    raise FileNotFoundError(f"Le fichier '{local_file_path}' n'existe pas.")
-
-# Détection de l'encodage du fichier
-with open(local_file_path, 'rb') as file:
-    raw_data = file.read()
+def detect_file_encoding(file_path):
+    with open(file_path, 'rb') as file:
+        raw_data = file.read()
     result = chardet.detect(raw_data)
-    detected_encoding = result['encoding']
-print(f"Encodage détecté : {detected_encoding}")
+    return result['encoding']
 
-# Chargement du dataset à partir du fichier CSV local
-encodings_to_try = [detected_encoding, 'utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
-for encoding in encodings_to_try:
+def load_csv_data(file_path, encoding):
     try:
-        # Lire seulement la première colonne du CSV
-        data = pd.read_csv(local_file_path, encoding=encoding, usecols=[0], header=None)
-        print(f"Lecture réussie avec l'encodage : {encoding}")
-        break
+        data = pd.read_csv(file_path, encoding=encoding, usecols=[0], header=None)
+        data.columns = ['transcript']
+        data['transcript'] = ';' + data['transcript']
+        return data
     except UnicodeDecodeError:
         print(f"Échec de lecture avec l'encodage : {encoding}")
-else:
-    raise ValueError("Impossible de lire le fichier avec les encodages essayés.")
+        return None
 
-# Renommer la colonne en 'transcript'
-data.columns = ['transcript']
-
-# Ajouter le point-virgule au début de chaque ligne
-data['transcript'] = ';' + data['transcript']
-
-# Afficher les informations sur le DataFrame pour le débogage
-print("Structure du DataFrame:")
-print(data.info())
-print("\nPremières lignes du DataFrame:")
-print(data.head())
-
-def process_line(line, meta, vector_size=36):  # Augmenté à 36 pour inclure le point-virgule
-    vector = np.zeros(vector_size, dtype=dtype)
+def process_line(line, meta=META, vector_size=VECTOR_SIZE):
+    vector = np.ones(vector_size, dtype=DTYPE)
     for i, char in enumerate(str(line).strip()):
         if i >= vector_size:
             break
-        vector[i] = meta['stoi'].get(char, 1)  # Utiliser 1 (espace) si le caractère n'est pas trouvé
+        vector[i] = meta['stoi'].get(char, 1)
     return vector
 
-# Traitement des données
-batches = []
-for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes"):
-    text = row['transcript']
-    batch = process_line(text, meta)
-    batches.append(batch)
+def process_data(data):
+    return np.array([process_line(row['transcript']) for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes")])
 
-batches = np.array(batches)
-
-# Sauvegarde des ensembles dans des fichiers binaires
-train_ratio = 0.1  # 10% des parties possibles de tic tac toe pour l'entraînement pour voir le grok !
-split_index = int(len(batches) * train_ratio)
-train_batches = batches[:split_index]
-val_batches = batches[split_index:]
-
-train_batches.tofile("data/txt/train.bin")
-val_batches.tofile("data/txt/val.bin")
-
-print(f"Ensemble d'entraînement sauvegardé dans 'train.bin'")
-print(f"Ensemble de validation sauvegardé dans 'val.bin'")
-
-# Affichage des 50 premières lignes du CSV pour vérification
-print("50 premières lignes du CSV:")
-print(data.head(50))
-
-# Informations sur les ensembles de données
-print(f"\nNombre total d'exemples : {len(batches)}")
-print(f"Nombre d'exemples d'entraînement : {len(train_batches)}")
-print(f"Nombre d'exemples de validation : {len(val_batches)}")
-
-def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=36):  # Modifié à 36
-    # Charger le fichier binaire
-    data = np.fromfile(filename, dtype=np.uint8)
+def save_data(data, train_ratio, train_file, val_file):
+    split_index = int(len(data) * train_ratio)
+    train_data = data[:split_index]
+    val_data = data[split_index:]
     
-    # Calculer le nombre total de batches
+    train_data.tofile(train_file)
+    val_data.tofile(val_file)
+    
+    print(f"Ensemble d'entraînement sauvegardé dans '{train_file}'")
+    print(f"Ensemble de validation sauvegardé dans '{val_file}'")
+    print(f"Nombre total d'exemples : {len(data)}")
+    print(f"Nombre d'exemples d'entraînement : {len(train_data)}")
+    print(f"Nombre d'exemples de validation : {len(val_data)}")
+
+def load_and_print_batches(filename, start_batch=0, end_batch=10, batch_size=VECTOR_SIZE):
+    data = np.fromfile(filename, dtype=DTYPE)
     total_batches = len(data) // batch_size
-    
-    # Limiter l'intervalle de batches à afficher si nécessaire
-    start_batch = max(0, start_batch)
+    start_batch = max(0, min(start_batch, total_batches - 1))
     end_batch = min(end_batch, total_batches)
     
-    # Afficher les batches dans l'intervalle spécifié
     for i in range(start_batch, end_batch):
-        batch_start = i * batch_size
-        batch_end = batch_start + batch_size
-        batch = data[batch_start:batch_end]
+        batch = data[i*batch_size:(i+1)*batch_size]
+        decoded = ''.join(META['itos'].get(token, ' ') for token in batch).rstrip()
         print(f"Batch {i+1}: {batch}")
-        
-        # Convertir les tokens en caractères
-        chars = [meta['itos'].get(token, ' ') for token in batch]
-        print(f"Décodé: {''.join(chars)}")
+        print(f"Décodé: {decoded}\n")
 
-# Exemple d'utilisation : afficher les batches de 1 à 10
-load_and_print_batches("data/txt/train.bin", start_batch=0, end_batch=10)
+def main():
+    if not os.path.exists(INPUT_FILE):
+        raise FileNotFoundError(f"Le fichier '{INPUT_FILE}' n'existe pas.")
+    
+    encoding = detect_file_encoding(INPUT_FILE)
+    print(f"Encodage détecté : {encoding}")
+    
+    data = load_csv_data(INPUT_FILE, encoding)
+    if data is None:
+        raise ValueError("Impossible de lire le fichier avec l'encodage détecté.")
+    
+    print("Structure du DataFrame:")
+    print(data.info())
+    print("\nPremières lignes du DataFrame:")
+    print(data.head())
+    
+    processed_data = process_data(data)
+    save_data(processed_data, TRAIN_RATIO, TRAIN_OUTPUT, VAL_OUTPUT)
+    
+    print("\nAperçu des données d'entraînement:")
+    load_and_print_batches(TRAIN_OUTPUT)
+
+if __name__ == "__main__":
+    main()
