@@ -6,8 +6,8 @@ import chardet
 
 # Dictionnaire de conversion fourni
 meta = {
-    'stoi': {' ': 0, '0': 1, '1': 2, '2': 3, '3': 4, 'X': 5, 'O': 6, '/': 7, '-': 8, '\n': 9},
-    'itos': {0: ' ', 1: '0', 2: '1', 3: '2', 4: '3', 5: 'X', 6: 'O', 7: '/', 8: '-', 9: '\n'}
+    'stoi': {' ': 0, '0': 1, '1': 2, '2': 3, '3': 4, 'X': 5, 'O': 6, '/': 7, '-': 8},
+    'itos': {0: ' ', 1: '0', 2: '1', 3: '2', 4: '3', 5: 'X', 6: 'O', 7: '/', 8: '-'}
 }
 
 dtype = np.uint8  # 32 tokens seulement dans le vocabulaire des LLMs pour les échecs
@@ -68,7 +68,7 @@ for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes
 batches = np.array(batches)
 
 # Sauvegarde des ensembles dans des fichiers binaires
-train_ratio = 0.1  # 1% des parties possibles de tic tac toe pour l'entraînement pour voir le grok !
+train_ratio = 0.01  # 1% des parties possibles de tic tac toe pour l'entraînement pour voir le grok !
 split_index = int(len(batches) * train_ratio)
 train_batches = batches[:split_index]
 val_batches = batches[split_index:]
@@ -88,7 +88,7 @@ print(f"\nNombre total d'exemples : {len(batches)}")
 print(f"Nombre d'exemples d'entraînement : {len(train_batches)}")
 print(f"Nombre d'exemples de validation : {len(val_batches)}")
 
-def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=40):
+def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=35):
     # Charger le fichier binaire
     data = np.fromfile(filename, dtype=np.uint8)
 
