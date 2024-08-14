@@ -88,7 +88,7 @@ print(f"\nNombre total d'exemples : {len(batches)}")
 print(f"Nombre d'exemples d'entraînement : {len(train_batches)}")
 print(f"Nombre d'exemples de validation : {len(val_batches)}")
 
-def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=27):
+def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=40):
     # Charger le fichier binaire
     data = np.fromfile(filename, dtype=np.uint8)
 
