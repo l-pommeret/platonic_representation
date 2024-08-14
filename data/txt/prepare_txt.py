@@ -6,10 +6,9 @@ import chardet
 
 # Dictionnaire de conversion fourni
 meta = {
-    'stoi': {' ': 0, '0': 1, '1': 2, '2': 3, '3': 4, 'X': 5, 'O': 6, '/': 7, '-': 8, '\n': 9},
-    'itos': {0: ' ', 1: '0', 2: '1', 3: '2', 4: '3', 5: 'X', 6: 'O', 7: '/', 8: '-', 9: '\n'}
+    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, '/': 8, '-': 9},
+    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: '/', 9: '-'}
 }
-
 dtype = np.uint8  # 32 tokens seulement dans le vocabulaire des LLMs pour les échecs
 
 # Chemin vers le fichier CSV local
@@ -24,12 +23,10 @@ with open(local_file_path, 'rb') as file:
     raw_data = file.read()
     result = chardet.detect(raw_data)
     detected_encoding = result['encoding']
-
 print(f"Encodage détecté : {detected_encoding}")
 
 # Chargement du dataset à partir du fichier CSV local
 encodings_to_try = [detected_encoding, 'utf-8', 'latin-1', 'iso-8859-1', 'cp1252']
-
 for encoding in encodings_to_try:
     try:
         # Lire seulement la première colonne du CSV
@@ -44,18 +41,21 @@ else:
 # Renommer la colonne en 'transcript'
 data.columns = ['transcript']
 
+# Ajouter le point-virgule au début de chaque ligne
+data['transcript'] = ';' + data['transcript']
+
 # Afficher les informations sur le DataFrame pour le débogage
 print("Structure du DataFrame:")
 print(data.info())
 print("\nPremières lignes du DataFrame:")
 print(data.head())
 
-def process_line(line, meta, vector_size=35):
+def process_line(line, meta, vector_size=36):  # Augmenté à 36 pour inclure le point-virgule
     vector = np.zeros(vector_size, dtype=dtype)
     for i, char in enumerate(str(line).strip()):
         if i >= vector_size:
             break
-        vector[i] = meta['stoi'].get(char, 0)  # Utiliser 0 si le caractère n'est pas trouvé
+        vector[i] = meta['stoi'].get(char, 1)  # Utiliser 1 (espace) si le caractère n'est pas trouvé
     return vector
 
 # Traitement des données
@@ -88,23 +88,27 @@ print(f"\nNombre total d'exemples : {len(batches)}")
 print(f"Nombre d'exemples d'entraînement : {len(train_batches)}")
 print(f"Nombre d'exemples de validation : {len(val_batches)}")
 
-def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=35):
+def load_and_print_batches(filename, start_batch=0, end_batch=50, batch_size=36):  # Modifié à 36
     # Charger le fichier binaire
     data = np.fromfile(filename, dtype=np.uint8)
-
+    
     # Calculer le nombre total de batches
     total_batches = len(data) // batch_size
-
+    
     # Limiter l'intervalle de batches à afficher si nécessaire
     start_batch = max(0, start_batch)
     end_batch = min(end_batch, total_batches)
-
+    
     # Afficher les batches dans l'intervalle spécifié
     for i in range(start_batch, end_batch):
         batch_start = i * batch_size
         batch_end = batch_start + batch_size
         batch = data[batch_start:batch_end]
         print(f"Batch {i+1}: {batch}")
+        
+        # Convertir les tokens en caractères
+        chars = [meta['itos'].get(token, ' ') for token in batch]
+        print(f"Décodé: {''.join(chars)}")
 
 # Exemple d'utilisation : afficher les batches de 1 à 10
-load_and_print_batches("data/txt/train.bin", start_batch=1, end_batch=10)
+load_and_print_batches("data/txt/train.bin", start_batch=0, end_batch=10)
