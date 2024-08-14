@@ -6,8 +6,8 @@ import chardet
 
 # Dictionnaire de conversion fourni
 meta = {
-    'stoi': {' ': 0, '1': 1, '2': 2, '3': 3, 'O': 4, 'X': 5, '\n': 6},
-    'itos': {0: ' ', 1: '1', 2: '2', 3: '3', 4: 'O', 5: 'X', 6: '\n'}
+    'stoi': {' ': 0, '0': 1, '1': 2, '2': 3, '3': 4, 'X': 5, 'O': 6, '/': 7, '-': 8},
+    'itos': {0: ' ', 1: '0', 2: '1', 3: '2', 4: '3', 5: 'X', 6: 'O', 7: '/', 8: '-'}
 }
 
 dtype = np.uint8  # 32 tokens seulement dans le vocabulaire des LLMs pour les échecs
@@ -50,7 +50,7 @@ print(data.info())
 print("\nPremières lignes du DataFrame:")
 print(data.head())
 
-def process_line(line, meta, vector_size=40):
+def process_line(line, meta, vector_size=35):
     vector = np.zeros(vector_size, dtype=dtype)
     for i, char in enumerate(str(line).strip()):
         if i >= vector_size:
