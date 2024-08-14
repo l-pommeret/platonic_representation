@@ -1,5 +1,5 @@
-out_dir = "out-shakespeare-char"
-eval_interval = 500
+out_dir = "out-txt-models"
+eval_interval = 100
 eval_iters = 100
 # I'm not sure what's going on, but when log_interval == 100, the time per iter is inaccurate and much longer than it should be
 # when running on multiple GPUs. TODO: investigate
@@ -7,9 +7,9 @@ log_interval = 50  # don't print too too often
 
 always_save_checkpoint = True
 
-wandb_log = False
-wandb_project = "chess-gpt-batch"
-wandb_run_name = "8layer_lichess"
+wandb_log = True
+wandb_project = "platonic-tic-tac-toe"
+wandb_run_name = "2_layers"
 
 dataset = "txt"
 gradient_accumulation_steps = 1
