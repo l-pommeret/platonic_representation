@@ -1,5 +1,5 @@
 out_dir = "out-shakespeare-char"
-eval_interval = 4000
+eval_interval = 500
 eval_iters = 100
 # I'm not sure what's going on, but when log_interval == 100, the time per iter is inaccurate and much longer than it should be
 # when running on multiple GPUs. TODO: investigate
