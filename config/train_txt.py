@@ -14,7 +14,7 @@ wandb_run_name = "8layer_lichess"
 dataset = "txt"
 gradient_accumulation_steps = 1
 batch_size = 256
-block_size = 39  # context of up to 1023 tokens (because dataset block size is 1024)
+block_size = 35  # context of up to 1023 tokens (because dataset block size is 1024)
 
 # baby GPT model :)
 n_layer = 2
@@ -23,7 +23,7 @@ n_embd = 256
 dropout = 0.0
 
 learning_rate = 3e-4
-max_iters = 600000
+max_iters = 5000
 lr_decay_iters = max_iters  # make equal to max_iters usually
 min_lr = 3e-5  # learning_rate / 10 usually
 beta2 = 0.95  # make a bit bigger because number of tokens per iter is small
