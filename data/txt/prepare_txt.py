@@ -8,7 +8,7 @@ import chardet
 INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
-TRAIN_RATIO = 0.1
+TRAIN_RATIO = 0.05
 VECTOR_SIZE = 36
 DTYPE = np.uint8
 
