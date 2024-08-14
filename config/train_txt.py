@@ -31,4 +31,4 @@ beta2 = 0.95  # make a bit bigger because number of tokens per iter is small
 warmup_iters = 2000  # not super necessary potentially
 compile = True
 
-weight_decay = 1
+weight_decay = 0.01
