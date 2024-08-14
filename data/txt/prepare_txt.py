@@ -50,7 +50,7 @@ print(data.info())
 print("\nPremières lignes du DataFrame:")
 print(data.head())
 
-def process_line(line, meta, vector_size=27):
+def process_line(line, meta, vector_size=40):
     vector = np.zeros(vector_size, dtype=dtype)
     for i, char in enumerate(str(line).strip()):
         if i >= vector_size:
