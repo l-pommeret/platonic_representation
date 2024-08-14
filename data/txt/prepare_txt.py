@@ -68,7 +68,7 @@ for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes
 batches = np.array(batches)
 
 # Sauvegarde des ensembles dans des fichiers binaires
-train_ratio = 0.01  # 1% des parties possibles de tic tac toe pour l'entraînement pour voir le grok !
+train_ratio = 0.1  # 10% des parties possibles de tic tac toe pour l'entraînement pour voir le grok !
 split_index = int(len(batches) * train_ratio)
 train_batches = batches[:split_index]
 val_batches = batches[split_index:]
