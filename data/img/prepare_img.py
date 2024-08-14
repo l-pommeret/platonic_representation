@@ -5,17 +5,23 @@ from tqdm import tqdm
 
 # Configuration
 INPUT_DIR = "data/img/files"  # Dossier contenant les images
-TRAIN_OUTPUT = "data/txt/train.bin"
-VAL_OUTPUT = "data/txt/val.bin"
+TRAIN_OUTPUT = "data/img/train.bin"
+VAL_OUTPUT = "data/img/val.bin"
 TRAIN_RATIO = 0.8
 IMAGE_SIZE = 12  # 12x12 pixels
 VECTOR_SIZE = IMAGE_SIZE * IMAGE_SIZE + 1  # +1 pour le token de début
 DTYPE = np.uint8
 
+# Valeurs de couleur fixes
+EMPTY = 128  # Gris
+O = 0        # Noir
+X = 255      # Blanc
+SEPARATOR = 128  # Gris
+
 # Dictionnaire de conversion
 META = {
-    'stoi': {'blanc': 0, 'gris': 1, 'noir': 2, 'début': 3},
-    'itos': {0: 'blanc', 1: 'gris', 2: 'noir', 3: 'début'}
+    'stoi': {'blanc': 0, 'noir': 1, 'gris': 2, 'début': 3},
+    'itos': {0: 'blanc', 1: 'noir', 2: 'gris', 3: 'début'}
 }
 
 def load_and_process_image(file_path):
@@ -25,8 +31,9 @@ def load_and_process_image(file_path):
         data = np.array(img)
         
         # Convertir les valeurs de pixel en tokens
-        data = np.digitize(data, [85, 170]) - 1  # 0-84: blanc, 85-169: gris, 170-255: noir
-        data = np.clip(data, 0, 2)  # Assurer que toutes les valeurs sont entre 0 et 2
+        data = np.where(data == X, META['stoi']['blanc'],
+                np.where(data == O, META['stoi']['noir'],
+                np.where(data == EMPTY, META['stoi']['gris'], META['stoi']['gris'])))
         
         # Créer le vecteur avec le token de début
         vector = np.zeros(VECTOR_SIZE, dtype=DTYPE)
