@@ -51,7 +51,7 @@ with open(csv_filename, 'w', newline='') as csvfile:
     csv_writer = csv.writer(csvfile)
     
     # Écrire l'en-tête
-    csv_writer.writerow(['Moves', 'Result'])
+    csv_writer.writerow(['transcript', 'Result'])
     
     # Écrire toutes les parties
     for moves, result in all_games:

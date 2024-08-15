@@ -18,6 +18,7 @@ def tokenize_and_pad(texts, tokenizer, max_length):
     return padded
 
 def extract_activations_single_layer(model, games, tokenizer, device, layer_num, batch_size=8, chunk_size=500):
+    model.to(device)  # Ensure the model is on the correct device
     model.eval()
     max_length = model.config.block_size
     all_activations = []
@@ -36,18 +37,18 @@ def extract_activations_single_layer(model, games, tokenizer, device, layer_num,
             with torch.no_grad():
                 _, _, hidden_states = model(input_ids)
             
-            activations = hidden_states[layer_num].cpu()
+            activations = hidden_states[layer_num]  # Keep on GPU
             chunk_activations.append(activations)
             
             del hidden_states
             torch.cuda.empty_cache()
         
         chunk_activations = torch.cat(chunk_activations, dim=0)
-        all_activations.append(chunk_activations.to('cpu'))
+        all_activations.append(chunk_activations)
         del chunk_activations
         torch.cuda.empty_cache()
     
-    return torch.cat(all_activations, dim=0)
+    return torch.cat(all_activations, dim=0)  # This will be on GPU
 
 def prepare_labels(games):
     labels = []
@@ -125,7 +126,18 @@ def save_activations(activations, layer):
         np.save(f'activations/activations_layer_{layer}_chunk_{i//chunk_size}.npy', chunk)
 
 def main():
-    model = load_model("out-txt-models/ckpt_iter_5000.pt")
+    # Check CUDA availability
+    if not torch.cuda.is_available():
+        print("CUDA is not available. Running on CPU.")
+        device = torch.device("cpu")
+    else:
+        print(f"CUDA is available. Using GPU: {torch.cuda.get_device_name(0)}")
+        device = torch.device("cuda:0")
+
+    # Load model and move to GPU
+    model = load_model("out-txt-models/ckpt_iter_900.pt")
+    model.to(device)
+    
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
     tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])
@@ -133,37 +145,43 @@ def main():
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         games = [f";{row.split(',')[0]}" for row in file.readlines()[1:]]
     
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    
     labels = prepare_labels(games)
     
     for layer in range(model.config.n_layer + 2):  # +2 for input embedding and final layer
         print(f"Processing layer {layer}")
-        activations = extract_activations_single_layer(model, games, tokenizer, device, layer)
+        try:
+            activations = extract_activations_single_layer(model, games, tokenizer, device, layer)
+            
+            # Move activations to CPU for numpy conversion
+            activations_cpu = activations.cpu()
+            
+            # Save activations to disk using numpy
+            np.save(f'activations_layer_{layer}.npy', activations_cpu.numpy())
+            
+            results = train_and_evaluate_probing_classifiers(activations_cpu, labels)
+            
+            # Print and save results for this layer
+            print(f"Layer {layer}:")
+            for pos_result in results:
+                print(f"  Position {pos_result['position'] + 1}:")
+                print(f"    Train Accuracy: {pos_result['train_accuracy']:.4f}")
+                print(f"    Train Loss: {pos_result['train_loss']:.4f}")
+                print(f"    Validation Accuracy: {pos_result['val_accuracy']:.4f}")
+                print(f"    Validation Loss: {pos_result['val_loss']:.4f}")
+            print()
+            
+            # Save results for this layer
+            with open(f"probing_results_layer_{layer}.pkl", 'wb') as f:
+                pickle.dump(results, f)
+            
+            # Clear memory
+            del activations, activations_cpu
+            torch.cuda.empty_cache()
         
-        # Save activations to disk using numpy
-        save_activations(activations.cpu(), layer)
-        
-        results = train_and_evaluate_probing_classifiers(activations, labels)
-        
-        # Print and save results for this layer
-        print(f"Layer {layer}:")
-        for pos_result in results:
-            print(f"  Position {pos_result['position'] + 1}:")
-            print(f"    Train Accuracy: {pos_result['train_accuracy']:.4f}")
-            print(f"    Train Loss: {pos_result['train_loss']:.4f}")
-            print(f"    Validation Accuracy: {pos_result['val_accuracy']:.4f}")
-            print(f"    Validation Loss: {pos_result['val_loss']:.4f}")
-        print()
-        
-        # Save results for this layer
-        os.makedirs('results', exist_ok=True)
-        with open(f"results/probing_results_layer_{layer}.pkl", 'wb') as f:
-            pickle.dump(results, f)
-        
-        # Clear memory
-        del activations
-        torch.cuda.empty_cache()
+        except RuntimeError as e:
+            print(f"Error processing layer {layer}: {str(e)}")
+            print("Skipping to next layer...")
+            continue
     
     print("Probing results for all layers saved.")
 
