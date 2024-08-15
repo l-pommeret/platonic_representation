@@ -80,7 +80,7 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=1000)
+        base_clf = LogisticRegression(max_iter=5000)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -171,7 +171,7 @@ def generate_graphs(all_results):
     plt.plot(layers, avg_accuracies, marker='o')
     plt.xlabel('Layer')
     plt.ylabel('Average Validation Accuracy')
-    plt.title('Average Accuracy Across Layers')
+    plt.title('Average Accuracy Across Layers (Linear Probing)')
     plt.xticks(layers)  # Ensure only whole number layers are shown
     plt.ylim(0, 1)  # Assuming accuracy is between 0 and 1
     plt.grid(True)
@@ -185,7 +185,7 @@ def generate_graphs(all_results):
         plt.plot(positions, accuracies[i], marker='o', label=f'Layer {layer}')
     plt.xlabel('Position')
     plt.ylabel('Validation Accuracy')
-    plt.title('Accuracy Across Positions for Each Layer')
+    plt.title('Accuracy Across Positions for Each Layer (Linear Probing)')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig('assets/accuracy_across_positions.png')
