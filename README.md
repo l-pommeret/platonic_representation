@@ -40,7 +40,7 @@ python sample.py --out_dir=out-shakespeare-char
 
 ### Training the Image-Based Transformer
 
-![A image game](assets/game_1.png)
+![A image game](assets/game1.png)
 
 ```bash
 cd platonic_representation
