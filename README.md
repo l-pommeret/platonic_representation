@@ -24,6 +24,8 @@ pip install torch numpy transformers datasets tiktoken wandb tqdm
 
 ### Training the Text-Based Transformer
 
+Example of a tic-tac-toe game : ```;X21 O23 X22 O31 X33 O32 X11``` 
+
 ```bash
 cd platonic_representation
 python data/txt/prepare_txt.py
@@ -37,6 +39,8 @@ python sample.py --out_dir=out-shakespeare-char
 ```
 
 ### Training the Image-Based Transformer
+
+![A image game](assets/game_1.png)
 
 ```bash
 cd platonic_representation

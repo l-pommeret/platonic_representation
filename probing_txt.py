@@ -165,15 +165,16 @@ def generate_graphs(all_results):
     positions = list(range(1, 10))
     accuracies = [[result['val_accuracy'] for result in layer_results] for layer_results in all_results]
 
-    # Plotting accuracy across layers
+    # Plotting average accuracy across layers
     plt.figure(figsize=(10, 6))
-    for i, pos in enumerate(positions):
-        plt.plot(layers, [acc[i] for acc in accuracies], marker='o', label=f'Position {pos}')
-
+    avg_accuracies = [np.mean(acc) for acc in accuracies]
+    plt.plot(layers, avg_accuracies, marker='o')
     plt.xlabel('Layer')
-    plt.ylabel('Validation Accuracy')
-    plt.title('Accuracy Across Layers for Each Position')
-    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.ylabel('Average Validation Accuracy')
+    plt.title('Average Accuracy Across Layers')
+    plt.xticks(layers)  # Ensure only whole number layers are shown
+    plt.ylim(0, 1)  # Assuming accuracy is between 0 and 1
+    plt.grid(True)
     plt.tight_layout()
     plt.savefig('assets/accuracy_across_layers.png')
     plt.close()
@@ -182,7 +183,6 @@ def generate_graphs(all_results):
     plt.figure(figsize=(10, 6))
     for i, layer in enumerate(layers):
         plt.plot(positions, accuracies[i], marker='o', label=f'Layer {layer}')
-
     plt.xlabel('Position')
     plt.ylabel('Validation Accuracy')
     plt.title('Accuracy Across Positions for Each Layer')
@@ -207,11 +207,11 @@ def main():
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row.split(',')[0]}" for row in file.readlines()[1:]]
     
-    # Randomly select 10% of the games
-    num_games_to_select = len(all_games) // 10
+    # Randomly select 20% of the games
+    num_games_to_select = len(all_games) // 20
     games = random.sample(all_games, num_games_to_select)
     
-    print(f"Processing {len(games)} games (10% of total)")
+    print(f"Processing {len(games)} games (20% of total)")
     
     labels = prepare_labels(games)
     
