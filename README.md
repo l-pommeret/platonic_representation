@@ -22,9 +22,17 @@ In this project, we test this hypothesis on a very simple world: Tic-tac-toe. We
 pip install torch numpy transformers datasets tiktoken wandb tqdm
 ```
 
-### Training the Text-Based Transformer
+## Text-games
 
-Example of a tic-tac-toe game : ```;X21 O23 X22 O31 X33 O32 X11``` 
+Example of a tic-tac-toe game: ```;X21 O23 X22 O31 X33 O32 X11``` 
+
+You can generate all the possible text-games with:
+
+```bash
+python txt_game_generator.py
+```
+
+### Training the Text-Based Transformer
 
 ```bash
 cd platonic_representation
@@ -36,6 +44,18 @@ python train.py config/train_txt.py
 
 ```bash
 python sample.py --out_dir=out-shakespeare-char
+```
+
+## Text-games
+
+The images are 12x12 png files, which contains one game each. The state of the square are denoted by gray-scale :
+
+![A image game](assets/game1.png)
+
+You can generate img-games (based on text-games) with:
+
+```bash
+python img_game_generator.py
 ```
 
 ### Training the Image-Based Transformer
