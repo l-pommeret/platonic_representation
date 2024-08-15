@@ -1,4 +1,4 @@
-# Platonic Representation
+# Platonic Representation of a Tic-tac-toe World
 
 [![Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1lIp2npuGWM4JiuvWlCtbm6ENpf22WAbH?usp=sharing)
 
