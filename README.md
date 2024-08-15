@@ -46,7 +46,7 @@ python train.py config/train_txt.py
 python sample.py --out_dir=out-shakespeare-char
 ```
 
-## Text-games
+## Image-games
 
 The images are 12x12 png files, which contains one game each. The state of the square are denoted by gray-scale :
 
@@ -59,8 +59,6 @@ python img_game_generator.py
 ```
 
 ### Training the Image-Based Transformer
-
-![A image game](assets/game1.png)
 
 ```bash
 cd platonic_representation
