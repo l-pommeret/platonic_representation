@@ -125,7 +125,7 @@ def save_activations(activations, layer):
         np.save(f'activations/activations_layer_{layer}_chunk_{i//chunk_size}.npy', chunk)
 
 def main():
-    model = load_model("out-txt-models/ckpt_iter_900.pt")
+    model = load_model("out-txt-models/ckpt_iter_5000.pt")
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
     tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])
