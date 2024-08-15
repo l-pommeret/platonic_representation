@@ -1,34 +1,83 @@
-out_dir = "out-txt-models"
-eval_interval = 100
-eval_iters = 100
-# I'm not sure what's going on, but when log_interval == 100, the time per iter is inaccurate and much longer than it should be
-# when running on multiple GPUs. TODO: investigate
-log_interval = 50  # don't print too too often
+import torch
+import argparse
+from tqdm import tqdm
+import os
 
-always_save_checkpoint = True
+# Import your GPT model and config
+from model import GPT, GPTConfig
 
-wandb_log = True
-wandb_project = "platonic-tic-tac-toe"
-wandb_run_name = "2_layers"
+def load_model(checkpoint_path):
+    config = GPTConfig(
+        block_size=35,
+        vocab_size=50304,  # Adjust if your vocab size is different
+        n_layer=2,
+        n_head=2,
+        n_embd=256,
+        dropout=0.0,
+        bias=True
+    )
+    model = GPT(config)
+    state_dict = torch.load(checkpoint_path, map_location='cpu')
+    model.load_state_dict(state_dict)
+    return model
 
-dataset = "txt"
-gradient_accumulation_steps = 1
-batch_size = 256
-block_size = 35  # context of up to 1023 tokens (because dataset block size is 1024)
+def extract_features(model, texts, tokenizer, args):
+    model.eval()
+    device = torch.device(args.device)
+    model.to(device)
+    
+    all_features = []
+    
+    for i in tqdm(range(0, len(texts), args.batch_size)):
+        batch_texts = texts[i:i+args.batch_size]
+        
+        # Tokenize
+        tokens = tokenizer(batch_texts, padding=True, truncation=True, max_length=model.config.block_size, return_tensors="pt")
+        input_ids = tokens.input_ids.to(device)
+        attention_mask = tokens.attention_mask.to(device)
+        
+        with torch.no_grad():
+            # Forward pass
+            outputs = model(input_ids, attention_mask=attention_mask)
+            
+            # Extract features based on the pooling method
+            if args.pool == 'last':
+                features = outputs[0][:, -1, :]  # Last hidden state
+            elif args.pool == 'avg':
+                features = outputs[0].mean(dim=1)  # Average of all hidden states
+            
+            all_features.append(features.cpu())
+    
+    return torch.cat(all_features, dim=0)
 
-# baby GPT model :)
-n_layer = 2
-n_head = 2
-n_embd = 256
-dropout = 0.0
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--checkpoint", type=str, required=True, help="Path to the model checkpoint")
+    parser.add_argument("--input_file", type=str, required=True, help="Path to input text file")
+    parser.add_argument("--output_file", type=str, required=True, help="Path to save extracted features")
+    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for processing")
+    parser.add_argument("--pool", type=str, default="last", choices=["last", "avg"], help="Pooling method for features")
+    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to use for computation")
+    args = parser.parse_args()
 
-learning_rate = 3e-4
-max_iters = 5000
-lr_decay_iters = max_iters  # make equal to max_iters usually
-min_lr = 3e-5  # learning_rate / 10 usually
-beta2 = 0.95  # make a bit bigger because number of tokens per iter is small
+    # Load the model
+    model = load_model(args.checkpoint)
+    
+    # Load the tokenizer (you might need to adjust this based on your tokenizer)
+    from transformers import GPT2Tokenizer
+    tokenizer = GPT2Tokenizer.from_pretrained('gpt2')
+    
+    # Load input texts
+    with open(args.input_file, 'r', encoding='utf-8') as f:
+        texts = f.readlines()
+    texts = [text.strip() for text in texts]
+    
+    # Extract features
+    features = extract_features(model, texts, tokenizer, args)
+    
+    # Save features
+    torch.save(features, args.output_file)
+    print(f"Features saved to {args.output_file}")
 
-warmup_iters = 2000  # not super necessary potentially
-compile = True
-
-weight_decay = 0.01
+if __name__ == "__main__":
+    main()
