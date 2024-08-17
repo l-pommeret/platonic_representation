@@ -50,7 +50,7 @@ python sample.py --out_dir=out-shakespeare-char
 
 The images are 12x12 png files, which contains one game each. The state of the square are denoted by gray-scale :
 
-![A image game](assets/game1.png)
+![A image game](assets/explain.png)
 
 You can generate img-games (based on text-games) with:
 

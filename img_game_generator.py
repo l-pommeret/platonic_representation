@@ -4,12 +4,11 @@ from PIL import Image, ImageDraw
 def create_board_image(moves):
     # Définir les couleurs
     EMPTY = 128  # Gris
-    O = 0        # Noir
-    X = 255      # Blanc
-    SEPARATOR = 128  # Gris
+    O = 0  # Noir
+    X = 255  # Blanc
 
-    # Créer une image 12x12
-    img = Image.new('L', (12, 12), color=SEPARATOR)
+    # Créer une image 9x9
+    img = Image.new('L', (9, 9), color=EMPTY)
     draw = ImageDraw.Draw(img)
 
     # Fonction pour dessiner un carré 3x3
@@ -21,7 +20,7 @@ def create_board_image(moves):
                     color = O
                 elif board[i][j] == 'X':
                     color = X
-                draw.rectangle([start_x + j, start_y + i, start_x + j, start_y + i], fill=color)
+                draw.point((start_x + j, start_y + i), fill=color)
 
     # Initialiser le plateau
     board = [[' ' for _ in range(3)] for _ in range(3)]
@@ -33,8 +32,8 @@ def create_board_image(moves):
         board[row][col] = player
 
         # Calculer la position du sous-plateau 3x3
-        sub_x = (i % 3) * 4
-        sub_y = (i // 3) * 4
+        sub_x = (i % 3) * 3
+        sub_y = (i // 3) * 3
 
         # Dessiner le sous-plateau 3x3
         draw_3x3(sub_x, sub_y, board)
@@ -56,5 +55,4 @@ def generate_game_images(csv_file, output_prefix):
 csv_file = 'data/txt/all_tic_tac_toe_games.csv'
 output_prefix = 'data/img/files/game'
 generate_game_images(csv_file, output_prefix)
-
 print("Génération d'images terminée.")
