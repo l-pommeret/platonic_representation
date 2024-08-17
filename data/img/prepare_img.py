@@ -33,7 +33,7 @@ def load_and_process_image(file_path):
         # Convertir les valeurs de pixel en tokens
         data = np.where(data == X, META['stoi']['b'],
                 np.where(data == O, META['stoi']['n'],
-                np.where(data == EMPTY, META['stoi']['g'], META['stoi']['gris'])))
+                np.where(data == EMPTY, META['stoi']['g'], META['stoi']['g'])))
         
         # Créer le vecteur avec le token de début
         vector = np.zeros(VECTOR_SIZE, dtype=DTYPE)
