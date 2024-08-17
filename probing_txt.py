@@ -31,9 +31,15 @@ def get_probe_points(model):
         probe_points.extend([
             f'layer{layer}_pre_attn_norm',
             f'layer{layer}_attn',
+            f'layer{layer}_post_attn',
             f'layer{layer}_pre_ffn_norm',
-            f'layer{layer}_mlp'
         ])
+        
+        # Add probe points for each MLP layer
+        mlp_layers = model.transformer.h[layer].mlp.net
+        for mlp_idx, _ in enumerate(mlp_layers):
+            if mlp_idx % 2 == 0:  # Only probe after activation functions
+                probe_points.append(f'layer{layer}_mlp{mlp_idx//2}')
     
     probe_points.extend(['final_ln', 'lm_head'])
     return probe_points
@@ -73,13 +79,19 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
                     chunk_activations[f'layer{layer_idx}_attn'].append(attn_output.cpu())
                     
                     x = x + attn_output
+                    chunk_activations[f'layer{layer_idx}_post_attn'].append(x.cpu())
+                    
                     ln2_out = layer.ln_2(x)
                     chunk_activations[f'layer{layer_idx}_pre_ffn_norm'].append(ln2_out.cpu())
                     
-                    mlp_output = layer.mlp(ln2_out)
-                    chunk_activations[f'layer{layer_idx}_mlp'].append(mlp_output.cpu())
+                    # Process MLP layers
+                    mlp_input = ln2_out
+                    for mlp_idx, mlp_layer in enumerate(layer.mlp.net):
+                        mlp_input = mlp_layer(mlp_input)
+                        if mlp_idx % 2 == 1:  # After activation function
+                            chunk_activations[f'layer{layer_idx}_mlp{mlp_idx//2}'].append(mlp_input.cpu())
                     
-                    x = x + mlp_output
+                    x = x + mlp_input
                 
                 # Final layer norm
                 x = model.transformer.ln_f(x)
@@ -91,14 +103,18 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
         
         # Concatenate and store chunk activations
         for point in probe_points:
-            all_activations[point].append(torch.cat(chunk_activations[point], dim=0))
-        
-        del chunk_activations
-        torch.cuda.empty_cache()
+            if chunk_activations[point]:
+                all_activations[point].append(torch.cat(chunk_activations[point], dim=0))
+            else:
+                print(f"Warning: No activations for {point} in this chunk")
     
     # Concatenate all chunks
     for point in probe_points:
-        all_activations[point] = torch.cat(all_activations[point], dim=0).numpy()
+        if all_activations[point]:
+            all_activations[point] = torch.cat(all_activations[point], dim=0).numpy()
+        else:
+            print(f"Warning: No activations for {point} across all chunks")
+            all_activations[point] = np.array([])
     
     return all_activations
 
@@ -170,6 +186,10 @@ def process_all_points(model, games, tokenizer, device, labels):
         
         all_results = {}
         for point, activations in all_activations.items():
+            if activations.size == 0:
+                print(f"Skipping {point} due to empty activations")
+                continue
+            
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
             
@@ -200,7 +220,6 @@ def process_all_points(model, games, tokenizer, device, labels):
         return all_results
     except Exception as e:
         print(f"Error processing probe points: {str(e)}")
-        print("Traceback:")
         print(traceback.format_exc())
         return None
 
@@ -269,7 +288,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_2000.pt").to(device)
     
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
@@ -288,9 +307,11 @@ def main():
     
     all_results = process_all_points(model, games, tokenizer, device, labels)
     
-    print("Probing results for all points saved.")
-
-    generate_graphs(all_results)
+    if all_results:
+        print("Probing results for all points saved.")
+        generate_graphs(all_results)
+    else:
+        print("Error: No results were generated during probing.")
 
 if __name__ == "__main__":
     main()

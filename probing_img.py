@@ -61,9 +61,15 @@ def get_probe_points(model):
         probe_points.extend([
             f'layer{layer}_pre_attn_norm',
             f'layer{layer}_attn',
+            f'layer{layer}_post_attn',
             f'layer{layer}_pre_ffn_norm',
-            f'layer{layer}_mlp'
         ])
+        
+        # Add probe points for each MLP layer
+        mlp_layers = model.transformer.h[layer].mlp.net
+        for mlp_idx, _ in enumerate(mlp_layers):
+            if mlp_idx % 2 == 0:  # Only probe after activation functions
+                probe_points.append(f'layer{layer}_mlp{mlp_idx//2}')
     
     probe_points.extend(['final_ln', 'lm_head'])
     return probe_points
@@ -103,17 +109,23 @@ def extract_activations_all_points(model, text_games, device, batch_size=4, chun
                         ln1_out = layer.ln_1(x)
                         chunk_activations[f'layer{layer_idx}_pre_attn_norm'].append(ln1_out.cpu())
                         
-                        attn_output = layer.attn(ln1_out)
+                        attn_output, _ = layer.attn(ln1_out)
                         chunk_activations[f'layer{layer_idx}_attn'].append(attn_output.cpu())
                         
                         x = x + attn_output
+                        chunk_activations[f'layer{layer_idx}_post_attn'].append(x.cpu())
+                        
                         ln2_out = layer.ln_2(x)
                         chunk_activations[f'layer{layer_idx}_pre_ffn_norm'].append(ln2_out.cpu())
                         
-                        mlp_output = layer.mlp(ln2_out)
-                        chunk_activations[f'layer{layer_idx}_mlp'].append(mlp_output.cpu())
+                        # Process MLP layers
+                        mlp_input = ln2_out
+                        for mlp_idx, mlp_layer in enumerate(layer.mlp.net):
+                            mlp_input = mlp_layer(mlp_input)
+                            if mlp_idx % 2 == 1:  # After activation function
+                                chunk_activations[f'layer{layer_idx}_mlp{mlp_idx//2}'].append(mlp_input.cpu())
                         
-                        x = x + mlp_output
+                        x = x + mlp_input
                     
                     # Final layer norm
                     x = model.transformer.ln_f(x)
