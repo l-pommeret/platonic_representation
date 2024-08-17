@@ -1,9 +1,10 @@
 import torch
 import numpy as np
 from sklearn.model_selection import KFold
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
+from sklearn.svm import LinearSVC
+from sklearn.metrics import accuracy_score
 from sklearn.multiclass import OneVsRestClassifier
+from sklearn.preprocessing import StandardScaler
 import pickle
 from tqdm import tqdm
 import os
@@ -165,54 +166,52 @@ def prepare_labels(text_games):
         labels.append(board)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels):
-    """Train and evaluate probing classifiers for each board position."""
+def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
+    """Train and evaluate probing classifiers for each board position using LinearSVC."""
     results = []
     n_splits = 5
     
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
     
+    # Normalisation des activations
+    scaler = StandardScaler()
+    activations_normalized = scaler.fit_transform(activations)
+    
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=1000)
+        base_clf = LinearSVC(max_iter=max_iter, dual=False)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         train_metrics = []
         val_metrics = []
         
-        for train_index, val_index in kf.split(activations):
-            X_train, X_val = activations[train_index], activations[val_index]
+        for train_index, val_index in kf.split(activations_normalized):
+            X_train, X_val = activations_normalized[train_index], activations_normalized[val_index]
             y_train, y_val = y[train_index], y[val_index]
             
             clf.fit(X_train, y_train)
             
             train_pred = clf.predict(X_train)
-            train_prob = clf.predict_proba(X_train)
             val_pred = clf.predict(X_val)
-            val_prob = clf.predict_proba(X_val)
             
             train_metrics.append({
-                'accuracy': (train_pred == y_train).mean(),
-                'loss': log_loss(y_train, train_prob)
+                'accuracy': accuracy_score(y_train, train_pred)
             })
             val_metrics.append({
-                'accuracy': (val_pred == y_val).mean(),
-                'loss': log_loss(y_val, val_prob)
+                'accuracy': accuracy_score(y_val, val_pred)
             })
         
         results.append({
             'position': position,
             'train_accuracy': np.mean([m['accuracy'] for m in train_metrics]),
-            'train_loss': np.mean([m['loss'] for m in train_metrics]),
-            'val_accuracy': np.mean([m['accuracy'] for m in val_metrics]),
-            'val_loss': np.mean([m['loss'] for m in val_metrics])
+            'val_accuracy': np.mean([m['accuracy'] for m in val_metrics])
         })
     
     return results
 
-def process_all_points(model, text_games, device, labels):
+def process_all_points(model, text_games, device, labels, max_iter=1000):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
@@ -227,7 +226,7 @@ def process_all_points(model, text_games, device, labels):
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
             
-            results = train_and_evaluate_probing_classifiers(activations, labels)
+            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter)
             
             print(f"Probe point: {point}")
             avg_train_accuracy = 0
@@ -336,7 +335,7 @@ def main():
     
     labels = prepare_labels(selected_games)
     
-    all_results = process_all_points(model, selected_games, device, labels)
+    all_results = process_all_points(model, selected_games, device, labels, max_iter=1000)
     
     if all_results:
         print("Probing results for all points saved.")
