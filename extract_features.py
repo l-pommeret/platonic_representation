@@ -57,65 +57,11 @@ def load_model(checkpoint_path):
     print(f"Model configuration: n_embd={config.n_embd}, n_layer={config.n_layer}, n_head={config.n_head}")
     return model
 
-def tokenize_and_pad(texts, tokenizer, block_size):
-    tokenized = [torch.tensor([tokenizer(c) for c in text]) for text in texts]
-    max_len = min(max(len(t) for t in tokenized), block_size)
-    padded = torch.full((len(texts), max_len), tokenizer(';'))  # Assuming ';' is the padding token
-    for i, t in enumerate(tokenized):
-        padded[i, :len(t)] = t[:max_len]
+def tokenize_and_pad(texts, tokenizer, max_length):
+    """Tokenize and pad a list of texts."""
+    tokenized = [[tokenizer(c) for c in text] for text in texts]
+    padded = torch.full((len(texts), max_length), tokenizer(';'))
+    for i, seq in enumerate(tokenized):
+        length = min(len(seq), max_length)
+        padded[i, :length] = torch.tensor(seq[:length])
     return padded
-
-def extract_features(model, texts, tokenizer, args):
-    model.eval()
-    device = torch.device(args.device)
-    model.to(device)
-    
-    all_hidden_states = []
-    
-    for i in tqdm(range(0, len(texts), args.batch_size)):
-        batch_texts = texts[i:i+args.batch_size]
-        
-        input_ids = tokenize_and_pad(batch_texts, tokenizer, model.config.block_size)
-        input_ids = input_ids.to(device)
-        
-        with torch.no_grad():
-            _, _, hidden_states = model(input_ids)
-            
-            # Convert hidden states to CPU and store
-            hidden_states = [h.cpu() for h in hidden_states]
-            all_hidden_states.append(hidden_states)
-    
-    # Combine hidden states from all batches
-    combined_hidden_states = [torch.cat([batch[i] for batch in all_hidden_states], dim=0) for i in range(len(all_hidden_states[0]))]
-    
-    return combined_hidden_states
-
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--checkpoint", type=str, required=True, help="Path to the model checkpoint")
-    parser.add_argument("--input_file", type=str, required=True, help="Path to input text file")
-    parser.add_argument("--output_file", type=str, required=True, help="Path to save extracted features")
-    parser.add_argument("--batch_size", type=int, default=32, help="Batch size for processing")
-    parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu", help="Device to use for computation")
-    args = parser.parse_args()
-
-    model = load_model(args.checkpoint)
-    
-    with open('data/txt/meta.pkl', 'rb') as f:
-        vocab_info = pickle.load(f)
-    
-    tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])  # Use ';' for unknown tokens
-    
-    with open(args.input_file, 'r', encoding='utf-8') as f:
-        texts = f.readlines()
-    texts = [text.strip() for text in texts]
-    
-    hidden_states = extract_features(model, texts, tokenizer, args)
-    
-    torch.save(hidden_states, args.output_file)
-    print(f"Hidden states saved to {args.output_file}")
-    print(f"Number of hidden state tensors: {len(hidden_states)}")
-    print(f"Shape of first hidden state tensor: {hidden_states[0].shape}")
-
-if __name__ == "__main__":
-    main()

@@ -11,23 +11,13 @@ import os
 import traceback
 import random
 import matplotlib.pyplot as plt
-from PIL import Image
 
-from extract_features import load_model
-
-def tokenize_and_pad(texts, tokenizer, max_length):
-    """Tokenize and pad a list of texts."""
-    tokenized = [[tokenizer(c) for c in text] for text in texts]
-    padded = torch.full((len(texts), max_length), tokenizer(';'))
-    for i, seq in enumerate(tokenized):
-        length = min(len(seq), max_length)
-        padded[i, :length] = torch.tensor(seq[:length])
-    return padded
+from extract_features import load_model, tokenize_and_pad
 
 def get_probe_points(model):
     """Dynamically generate probe points based on model architecture."""
     probe_points = ['embedding']
-    
+
     num_layers = len(model.transformer.h)
     for layer in range(num_layers):
         probe_points.extend([
@@ -38,7 +28,7 @@ def get_probe_points(model):
             f'layer{layer}_mlp_fc',
             f'layer{layer}_mlp_proj'
         ])
-    
+
     probe_points.extend(['final_ln', 'lm_head'])
     return probe_points
 
@@ -46,66 +36,66 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
     """Extract activations for all possible points in the model."""
     model.eval()
     max_length = model.config.block_size
-    
+
     probe_points = get_probe_points(model)
-    
+
     all_activations = {point: [] for point in probe_points}
-    
+
     for chunk_start in tqdm(range(0, len(games), chunk_size), desc="Processing chunks"):
         chunk_end = min(chunk_start + chunk_size, len(games))
         chunk_games = games[chunk_start:chunk_end]
-        
+
         chunk_activations = {point: [] for point in probe_points}
-        
+
         for i in range(0, len(chunk_games), batch_size):
             batch = chunk_games[i:i+batch_size]
             input_ids = tokenize_and_pad(batch, tokenizer, max_length).to(device)
-            
+
             with torch.no_grad():
                 # Embedding
                 embedding = model.transformer.wte(input_ids) + model.transformer.wpe(torch.arange(input_ids.size(1), device=device))
                 chunk_activations['embedding'].append(embedding.cpu())
-                
+
                 x = model.transformer.drop(embedding)
-                
+
                 # Process all layers
                 for layer_idx, block in enumerate(model.transformer.h):
                     ln1_out = block.ln_1(x)
                     chunk_activations[f'layer{layer_idx}_pre_attn_norm'].append(ln1_out.cpu())
-                    
+
                     attn_output = block.attn(ln1_out)
                     chunk_activations[f'layer{layer_idx}_attn'].append(attn_output.cpu())
-                    
+
                     x = x + attn_output
                     chunk_activations[f'layer{layer_idx}_post_attn'].append(x.cpu())
-                    
+
                     ln2_out = block.ln_2(x)
                     chunk_activations[f'layer{layer_idx}_pre_ffn_norm'].append(ln2_out.cpu())
-                    
+
                     # MLP layers
                     mlp_fc = block.mlp.c_fc(ln2_out)
                     chunk_activations[f'layer{layer_idx}_mlp_fc'].append(mlp_fc.cpu())
-                    
+
                     mlp_output = block.mlp(ln2_out)
                     chunk_activations[f'layer{layer_idx}_mlp_proj'].append(mlp_output.cpu())
-                    
+
                     x = x + mlp_output
-                
+
                 # Final layer norm
                 x = model.transformer.ln_f(x)
                 chunk_activations['final_ln'].append(x.cpu())
-                
+
                 # Language model head
                 lm_output = model.lm_head(x)
                 chunk_activations['lm_head'].append(lm_output.cpu())
-        
+
         # Concatenate and store chunk activations
         for point in probe_points:
             if chunk_activations[point]:
                 all_activations[point].append(torch.cat(chunk_activations[point], dim=0))
             else:
                 print(f"Warning: No activations for {point} in this chunk")
-    
+
     # Concatenate all chunks
     for point in probe_points:
         if all_activations[point]:
@@ -113,7 +103,7 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
         else:
             print(f"Warning: No activations for {point} across all chunks")
             all_activations[point] = np.array([])
-    
+
     return all_activations
 
 def prepare_labels(games):
@@ -129,70 +119,68 @@ def prepare_labels(games):
         labels.append(board)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels):
-    """Train and evaluate probing classifiers for each board position."""
+def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
+    """Train and evaluate probing classifiers for each board position using LinearSVC."""
     results = []
     n_splits = 5
-    
+
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
-    
+
+    # Normalisation des activations
+    scaler = StandardScaler()
+    activations_normalized = scaler.fit_transform(activations)
+
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=1000)
+        base_clf = LinearSVC(max_iter=max_iter, dual=False)
         clf = OneVsRestClassifier(base_clf)
-        
+
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         train_metrics = []
         val_metrics = []
-        
-        for train_index, val_index in kf.split(activations):
-            X_train, X_val = activations[train_index], activations[val_index]
+
+        for train_index, val_index in kf.split(activations_normalized):
+            X_train, X_val = activations_normalized[train_index], activations_normalized[val_index]
             y_train, y_val = y[train_index], y[val_index]
-            
+
             clf.fit(X_train, y_train)
-            
+
             train_pred = clf.predict(X_train)
-            train_prob = clf.predict_proba(X_train)
             val_pred = clf.predict(X_val)
-            val_prob = clf.predict_proba(X_val)
-            
+
             train_metrics.append({
-                'accuracy': (train_pred == y_train).mean(),
-                'loss': log_loss(y_train, train_prob)
+                'accuracy': accuracy_score(y_train, train_pred)
             })
             val_metrics.append({
-                'accuracy': (val_pred == y_val).mean(),
-                'loss': log_loss(y_val, val_prob)
+                'accuracy': accuracy_score(y_val, val_pred)
             })
-        
+
         results.append({
             'position': position,
             'train_accuracy': np.mean([m['accuracy'] for m in train_metrics]),
-            'train_loss': np.mean([m['loss'] for m in train_metrics]),
-            'val_accuracy': np.mean([m['accuracy'] for m in val_metrics]),
-            'val_loss': np.mean([m['loss'] for m in val_metrics])
+            'val_accuracy': np.mean([m['accuracy'] for m in val_metrics])
         })
-    
+
     return results
 
-def process_all_points(model, games, tokenizer, device, labels):
+def process_all_points(model, games, tokenizer, device, labels, max_iter=1000):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
         all_activations = extract_activations_all_points(model, games, tokenizer, device)
-        
+
         all_results = {}
         for point, activations in all_activations.items():
             if activations.size == 0:
                 print(f"Skipping {point} due to empty activations")
                 continue
-            
+
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
-            
-            results = train_and_evaluate_probing_classifiers(activations, labels)
-            
+
+            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter)
+
             print(f"Probe point: {point}")
             avg_train_accuracy = 0
             avg_val_accuracy = 0
@@ -202,19 +190,19 @@ def process_all_points(model, games, tokenizer, device, labels):
                 print(f"    Validation Accuracy: {pos_result['val_accuracy']:.4f}")
                 avg_train_accuracy += pos_result['train_accuracy']
                 avg_val_accuracy += pos_result['val_accuracy']
-            
+
             avg_train_accuracy /= 9
             avg_val_accuracy /= 9
             print(f"\n{point} Summary:")
             print(f"  Average Train Accuracy: {avg_train_accuracy:.4f}")
             print(f"  Average Validation Accuracy: {avg_val_accuracy:.4f}")
             print()
-            
+
             all_results[point] = results
-            
+
             with open(f"probing_results_{point}.pkl", 'wb') as f:
                 pickle.dump(results, f)
-        
+
         return all_results
     except Exception as e:
         print(f"Error processing probe points: {str(e)}")
@@ -225,11 +213,11 @@ def generate_graphs(all_results):
     """Generate and save graphs for probing results."""
     probe_points = list(all_results.keys())
     positions = list(range(1, 10))
-    
+
     # Plotting average accuracy across probe points
     plt.figure(figsize=(15, 8))
     avg_accuracies = [np.mean([result['val_accuracy'] for result in results]) for results in all_results.values()]
-    
+
     # Create custom x-axis labels
     x_labels = []
     x_ticks = []
@@ -240,7 +228,7 @@ def generate_graphs(all_results):
         else:
             x_labels.append(point)
         x_ticks.append(i)
-    
+
     plt.plot(x_ticks, avg_accuracies, marker='o')
     plt.xlabel('Probe Point')
     plt.ylabel('Average Validation Accuracy')
@@ -283,28 +271,28 @@ def generate_graphs(all_results):
     print("Graphs have been saved in the assets directory.")
 
 def main():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
     model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
-    
+
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
     tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])
-    
+
     # Load and sample games
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row.split(',')[0]}" for row in file.readlines()[1:]]
-    
+
     num_games_to_select = len(all_games) // 20
     games = random.sample(all_games, num_games_to_select)
-    
+
     print(f"Processing {len(games)} games (5% of total)")
-    
+
     labels = prepare_labels(games)
-    
-    all_results = process_all_points(model, games, tokenizer, device, labels)
-    
+
+    all_results = process_all_points(model, games, tokenizer, device, labels, max_iter=1000)
+
     if all_results:
         print("Probing results for all points saved.")
         generate_graphs(all_results)
