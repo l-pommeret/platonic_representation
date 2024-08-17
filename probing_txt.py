@@ -4,6 +4,7 @@ from sklearn.model_selection import KFold
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import log_loss
 from sklearn.multiclass import OneVsRestClassifier
+from sklearn.preprocessing import StandardScaler
 import pickle
 from tqdm import tqdm
 import os
@@ -127,7 +128,7 @@ def prepare_labels(games):
         labels.append(board)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels):
+def train_and_evaluate_probing_classifiers(activations, labels, max_iter=5000, solver='lbfgs'):
     """Train and evaluate probing classifiers for each board position."""
     results = []
     n_splits = 5
@@ -135,17 +136,21 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
     
+    # Prétraitement des données
+    scaler = StandardScaler()
+    activations_scaled = scaler.fit_transform(activations)
+    
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=1000)
+        base_clf = LogisticRegression(max_iter=max_iter, solver=solver, n_jobs=-1)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         train_metrics = []
         val_metrics = []
         
-        for train_index, val_index in kf.split(activations):
-            X_train, X_val = activations[train_index], activations[val_index]
+        for train_index, val_index in kf.split(activations_scaled):
+            X_train, X_val = activations_scaled[train_index], activations_scaled[val_index]
             y_train, y_val = y[train_index], y[val_index]
             
             clf.fit(X_train, y_train)
@@ -174,7 +179,7 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     
     return results
 
-def process_all_points(model, games, tokenizer, device, labels):
+def process_all_points(model, games, tokenizer, device, labels, max_iter=5000, solver='lbfgs'):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
@@ -189,7 +194,7 @@ def process_all_points(model, games, tokenizer, device, labels):
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
             
-            results = train_and_evaluate_probing_classifiers(activations, labels)
+            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter, solver=solver)
             
             print(f"Probe point: {point}")
             avg_train_accuracy = 0
@@ -284,7 +289,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_2000.pt").to(device)
     
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
@@ -301,7 +306,8 @@ def main():
     
     labels = prepare_labels(games)
     
-    all_results = process_all_points(model, games, tokenizer, device, labels)
+    # Augmenter le nombre d'itérations et changer le solveur si nécessaire
+    all_results = process_all_points(model, games, tokenizer, device, labels, max_iter=10000, solver='saga')
     
     if all_results:
         print("Probing results for all points saved.")
