@@ -20,8 +20,8 @@ SEPARATOR = 128  # Gris
 
 # Dictionnaire de conversion
 META = {
-    'stoi': {'blanc': 0, 'noir': 1, 'gris': 2, 'début': 3},
-    'itos': {0: 'blanc', 1: 'noir', 2: 'gris', 3: 'début'}
+    'stoi': {'b': 0, 'n': 1, 'g': 2, ';': 3},
+    'itos': {0: 'b', 1: 'n', 2: 'g', 3: ';'}
 }
 
 def load_and_process_image(file_path):

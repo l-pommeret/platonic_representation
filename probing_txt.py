@@ -29,8 +29,8 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
     
     probe_points = [
         'embedding',
-        'layer0_ln1', 'layer0_attn', 'layer0_ln2', 'layer0_mlp',
-        'layer1_ln1', 'layer1_attn', 'layer1_ln2', 'layer1_mlp',
+        'layer0_pre_attn_norm', 'layer0_attn', 'layer0_pre_ffn_norm', 'layer0_mlp',
+        'layer1_pre_attn_norm', 'layer1_attn', 'layer1_pre_ffn_norm', 'layer1_mlp',
         'final_ln',
         'lm_head'
     ]
@@ -57,14 +57,14 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
                 # Layer 0
                 layer0 = model.transformer.h[0]
                 ln1_out = layer0.ln_1(x)
-                chunk_activations['layer0_ln1'].append(ln1_out.cpu())
+                chunk_activations['layer0_pre_attn_norm'].append(ln1_out.cpu())
                 
                 attn_output = layer0.attn(ln1_out)
                 chunk_activations['layer0_attn'].append(attn_output.cpu())
                 
                 x = x + attn_output
                 ln2_out = layer0.ln_2(x)
-                chunk_activations['layer0_ln2'].append(ln2_out.cpu())
+                chunk_activations['layer0_pre_ffn_norm'].append(ln2_out.cpu())
                 
                 mlp_output = layer0.mlp(ln2_out)
                 chunk_activations['layer0_mlp'].append(mlp_output.cpu())
@@ -74,14 +74,14 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
                 # Layer 1
                 layer1 = model.transformer.h[1]
                 ln1_out = layer1.ln_1(x)
-                chunk_activations['layer1_ln1'].append(ln1_out.cpu())
+                chunk_activations['layer1_pre_attn_norm'].append(ln1_out.cpu())
                 
                 attn_output = layer1.attn(ln1_out)
                 chunk_activations['layer1_attn'].append(attn_output.cpu())
                 
                 x = x + attn_output
                 ln2_out = layer1.ln_2(x)
-                chunk_activations['layer1_ln2'].append(ln2_out.cpu())
+                chunk_activations['layer1_pre_ffn_norm'].append(ln2_out.cpu())
                 
                 mlp_output = layer1.mlp(ln2_out)
                 chunk_activations['layer1_mlp'].append(mlp_output.cpu())
