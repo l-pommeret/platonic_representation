@@ -128,31 +128,36 @@ def prepare_labels(games):
         labels.append(board)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels, max_iter=5000, solver='lbfgs'):
-    """Train and evaluate probing classifiers for each board position."""
+def train_and_evaluate_probing_classifiers(activations, labels, max_iter=5000, solver='lbfgs', layer_name="Unknown"):
+    """Train and evaluate probing classifiers for each board position with detailed logging."""
     results = []
     n_splits = 5
     
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
     
+    print(f"\nProcessing layer: {layer_name}")
+    print(f"Activation shape: {activations.shape}")
+    
     # Prétraitement des données
     scaler = StandardScaler()
     activations_scaled = scaler.fit_transform(activations)
     
     for position in range(9):
+        print(f"\n  Position {position + 1}:")
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=max_iter, solver=solver, n_jobs=-1)
+        base_clf = LogisticRegression(max_iter=max_iter, solver=solver, n_jobs=-1, verbose=0)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         train_metrics = []
         val_metrics = []
         
-        for train_index, val_index in kf.split(activations_scaled):
+        for fold, (train_index, val_index) in enumerate(kf.split(activations_scaled), 1):
             X_train, X_val = activations_scaled[train_index], activations_scaled[val_index]
             y_train, y_val = y[train_index], y[val_index]
             
+            print(f"    Fold {fold}:")
             clf.fit(X_train, y_train)
             
             train_pred = clf.predict(X_train)
@@ -160,21 +165,37 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter=5000, s
             val_pred = clf.predict(X_val)
             val_prob = clf.predict_proba(X_val)
             
+            train_acc = accuracy_score(y_train, train_pred)
+            train_loss = log_loss(y_train, train_prob)
+            val_acc = accuracy_score(y_val, val_pred)
+            val_loss = log_loss(y_val, val_prob)
+            
+            print(f"      Train Accuracy: {train_acc:.4f}, Loss: {train_loss:.4f}")
+            print(f"      Val Accuracy: {val_acc:.4f}, Loss: {val_loss:.4f}")
+            
             train_metrics.append({
-                'accuracy': (train_pred == y_train).mean(),
-                'loss': log_loss(y_train, train_prob)
+                'accuracy': train_acc,
+                'loss': train_loss
             })
             val_metrics.append({
-                'accuracy': (val_pred == y_val).mean(),
-                'loss': log_loss(y_val, val_prob)
+                'accuracy': val_acc,
+                'loss': val_loss
             })
+        
+        avg_train_acc = np.mean([m['accuracy'] for m in train_metrics])
+        avg_train_loss = np.mean([m['loss'] for m in train_metrics])
+        avg_val_acc = np.mean([m['accuracy'] for m in val_metrics])
+        avg_val_loss = np.mean([m['loss'] for m in val_metrics])
+        
+        print(f"    Average Train Accuracy: {avg_train_acc:.4f}, Loss: {avg_train_loss:.4f}")
+        print(f"    Average Val Accuracy: {avg_val_acc:.4f}, Loss: {avg_val_loss:.4f}")
         
         results.append({
             'position': position,
-            'train_accuracy': np.mean([m['accuracy'] for m in train_metrics]),
-            'train_loss': np.mean([m['loss'] for m in train_metrics]),
-            'val_accuracy': np.mean([m['accuracy'] for m in val_metrics]),
-            'val_loss': np.mean([m['loss'] for m in val_metrics])
+            'train_accuracy': avg_train_acc,
+            'train_loss': avg_train_loss,
+            'val_accuracy': avg_val_acc,
+            'val_loss': avg_val_loss
         })
     
     return results
@@ -191,27 +212,14 @@ def process_all_points(model, games, tokenizer, device, labels, max_iter=5000, s
                 print(f"Skipping {point} due to empty activations")
                 continue
             
-            print(f"Processing probe point: {point}")
-            print(f"Activations shape: {activations.shape}")
+            print(f"\nProcessing probe point: {point}")
+            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter, solver=solver, layer_name=point)
             
-            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter, solver=solver)
-            
-            print(f"Probe point: {point}")
-            avg_train_accuracy = 0
-            avg_val_accuracy = 0
-            for pos_result in results:
-                print(f"  Position {pos_result['position'] + 1}:")
-                print(f"    Train Accuracy: {pos_result['train_accuracy']:.4f}")
-                print(f"    Validation Accuracy: {pos_result['val_accuracy']:.4f}")
-                avg_train_accuracy += pos_result['train_accuracy']
-                avg_val_accuracy += pos_result['val_accuracy']
-            
-            avg_train_accuracy /= 9
-            avg_val_accuracy /= 9
+            avg_train_accuracy = np.mean([r['train_accuracy'] for r in results])
+            avg_val_accuracy = np.mean([r['val_accuracy'] for r in results])
             print(f"\n{point} Summary:")
             print(f"  Average Train Accuracy: {avg_train_accuracy:.4f}")
             print(f"  Average Validation Accuracy: {avg_val_accuracy:.4f}")
-            print()
             
             all_results[point] = results
             
