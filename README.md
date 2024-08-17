@@ -2,7 +2,7 @@
 
 [![Google Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1lIp2npuGWM4JiuvWlCtbm6ENpf22WAbH?usp=sharing)
 
-![Accuracy Across Layers](assets/accuracy_across_probe_points.png)
+![Accuracy Across Layers](assets/txt_accuracy_across_probe_points.png)
 
 ## Introduction
 
