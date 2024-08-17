@@ -43,12 +43,12 @@ python train.py config/train_txt.py
 ### Sampling for the Text Model
 
 ```bash
-python sample.py --out_dir=out-shakespeare-char
+python sample.py --out_dir=out-txt-models
 ```
 
 ## Image-games
 
-The images are 12x12 png files, which contains one game each. The state of the square are denoted by gray-scale :
+The images are 9x9 png files, which contains one game each. The state of the square are denoted by gray-scale :
 
 ![A image game](assets/explain.png)
 
@@ -70,7 +70,7 @@ python train.py config/train_img.py
 ### Sampling for the Image Model
 
 ```bash
-python sample.py --out_dir=out-shakespeare-char
+python sample.py --out_dir=out-img-models
 ```
 
 ### Probing layer by layer for txt
