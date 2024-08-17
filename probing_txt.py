@@ -132,7 +132,7 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=10000)
+        base_clf = LogisticRegression(max_iter=5000)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -262,7 +262,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_0.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_2000.pt").to(device)
     
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
