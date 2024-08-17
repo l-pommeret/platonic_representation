@@ -137,7 +137,7 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=500)
+        base_clf = LogisticRegression(max_iter=1000)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
