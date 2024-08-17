@@ -10,109 +10,151 @@ import os
 import traceback
 import random
 import matplotlib.pyplot as plt
+from PIL import Image
 
 from extract_features import load_model
+from img_game_generator import create_board_image
 
-def tokenize_and_pad(texts, tokenizer, max_length):
-    """Tokenize and pad a list of texts."""
-    tokenized = [[tokenizer(c) for c in text] for text in texts]
-    padded = torch.full((len(texts), max_length), tokenizer(';'))
-    for i, seq in enumerate(tokenized):
-        length = min(len(seq), max_length)
-        padded[i, :length] = torch.tensor(seq[:length])
-    return padded
+# Configuration
+IMAGE_SIZE = 12
+VECTOR_SIZE = IMAGE_SIZE * IMAGE_SIZE + 1
+META = {
+    'stoi': {'blanc': 0, 'noir': 1, 'gris': 2, 'début': 3},
+    'itos': {0: 'blanc', 1: 'noir', 2: 'gris', 3: 'début'}
+}
 
-def extract_activations_all_points(model, games, tokenizer, device, batch_size=1, chunk_size=25):
+def text_to_image(text_game):
+    """Convert a text representation of a game to an image."""
+    moves = text_game[1:].split()  # Remove the leading semicolon and split
+    img = create_board_image(moves)
+    return img
+
+def load_and_process_image(img):
+    """Process a PIL Image object."""
+    img = img.convert('L')
+    img = img.resize((IMAGE_SIZE, IMAGE_SIZE))
+    data = np.array(img)
+    
+    data = np.where(data == 255, META['stoi']['blanc'],
+                    np.where(data == 0, META['stoi']['noir'],
+                             META['stoi']['gris']))
+    
+    vector = np.zeros(VECTOR_SIZE, dtype=np.int64)
+    vector[0] = META['stoi']['début']
+    
+    index = 1
+    for i in range(IMAGE_SIZE):
+        if i % 2 == 0:
+            vector[index:index+IMAGE_SIZE] = data[i]
+        else:
+            vector[index:index+IMAGE_SIZE] = data[i][::-1]
+        index += IMAGE_SIZE
+    
+    return vector
+
+def extract_activations_all_points(model, text_games, device, batch_size=4, chunk_size=100):
     """Extract activations for all possible points in the model."""
     model.eval()
-    max_length = model.config.block_size
     
     probe_points = [
         'embedding',
-        'layer0_ln1', 'layer0_attn', 'layer0_ln2', 'layer0_mlp',
-        'layer1_ln1', 'layer1_attn', 'layer1_ln2', 'layer1_mlp',
+        'layer0_pre_attn_norm', 'layer0_attn', 'layer0_pre_ffn_norm', 'layer0_mlp',
+        'layer1_pre_attn_norm', 'layer1_attn', 'layer1_pre_ffn_norm', 'layer1_mlp',
         'final_ln',
         'lm_head'
     ]
     
     all_activations = {point: [] for point in probe_points}
     
-    for chunk_start in tqdm(range(0, len(games), chunk_size), desc="Processing chunks"):
-        chunk_end = min(chunk_start + chunk_size, len(games))
-        chunk_games = games[chunk_start:chunk_end]
+    for chunk_start in tqdm(range(0, len(text_games), chunk_size), desc="Processing chunks"):
+        chunk_end = min(chunk_start + chunk_size, len(text_games))
+        chunk_games = text_games[chunk_start:chunk_end]
         
         chunk_activations = {point: [] for point in probe_points}
         
         for i in range(0, len(chunk_games), batch_size):
-            batch = chunk_games[i:i+batch_size]
-            input_ids = tokenize_and_pad(batch, tokenizer, max_length).to(device)
-            
-            with torch.no_grad():
-                # Embedding
-                embedding = model.transformer.wte(input_ids) + model.transformer.wpe(torch.arange(input_ids.size(1), device=device))
-                chunk_activations['embedding'].append(embedding.cpu())
+            batch_games = chunk_games[i:i+batch_size]
+            try:
+                batch_images = [text_to_image(game) for game in batch_games]
+                batch_data = [load_and_process_image(img) for img in batch_images]
                 
-                x = model.transformer.drop(embedding)
+                batch_data_np = np.array(batch_data, dtype=np.int64)
+                batch_tensor = torch.from_numpy(batch_data_np).to(device)
                 
-                # Layer 0
-                layer0 = model.transformer.h[0]
-                ln1_out = layer0.ln_1(x)
-                chunk_activations['layer0_ln1'].append(ln1_out.cpu())
-                
-                attn_output = layer0.attn(ln1_out)
-                chunk_activations['layer0_attn'].append(attn_output.cpu())
-                
-                x = x + attn_output
-                ln2_out = layer0.ln_2(x)
-                chunk_activations['layer0_ln2'].append(ln2_out.cpu())
-                
-                mlp_output = layer0.mlp(ln2_out)
-                chunk_activations['layer0_mlp'].append(mlp_output.cpu())
-                
-                x = x + mlp_output
-                
-                # Layer 1
-                layer1 = model.transformer.h[1]
-                ln1_out = layer1.ln_1(x)
-                chunk_activations['layer1_ln1'].append(ln1_out.cpu())
-                
-                attn_output = layer1.attn(ln1_out)
-                chunk_activations['layer1_attn'].append(attn_output.cpu())
-                
-                x = x + attn_output
-                ln2_out = layer1.ln_2(x)
-                chunk_activations['layer1_ln2'].append(ln2_out.cpu())
-                
-                mlp_output = layer1.mlp(ln2_out)
-                chunk_activations['layer1_mlp'].append(mlp_output.cpu())
-                
-                x = x + mlp_output
-                
-                # Final layer norm
-                x = model.transformer.ln_f(x)
-                chunk_activations['final_ln'].append(x.cpu())
-                
-                # Language model head
-                lm_output = model.lm_head(x)
-                chunk_activations['lm_head'].append(lm_output.cpu())
+                with torch.no_grad():
+                    # Embedding
+                    embedding = model.transformer.wte(batch_tensor)
+                    chunk_activations['embedding'].append(embedding.cpu())
+                    
+                    x = model.transformer.drop(embedding)
+                    
+                    # Layer 0
+                    layer0 = model.transformer.h[0]
+                    ln1_out = layer0.ln_1(x)
+                    chunk_activations['layer0_pre_attn_norm'].append(ln1_out.cpu())
+                    
+                    attn_output = layer0.attn(ln1_out)
+                    chunk_activations['layer0_attn'].append(attn_output.cpu())
+                    
+                    x = x + attn_output
+                    ln2_out = layer0.ln_2(x)
+                    chunk_activations['layer0_pre_ffn_norm'].append(ln2_out.cpu())
+                    
+                    mlp_output = layer0.mlp(ln2_out)
+                    chunk_activations['layer0_mlp'].append(mlp_output.cpu())
+                    
+                    x = x + mlp_output
+                    
+                    # Layer 1
+                    layer1 = model.transformer.h[1]
+                    ln1_out = layer1.ln_1(x)
+                    chunk_activations['layer1_pre_attn_norm'].append(ln1_out.cpu())
+                    
+                    attn_output = layer1.attn(ln1_out)
+                    chunk_activations['layer1_attn'].append(attn_output.cpu())
+                    
+                    x = x + attn_output
+                    ln2_out = layer1.ln_2(x)
+                    chunk_activations['layer1_pre_ffn_norm'].append(ln2_out.cpu())
+                    
+                    mlp_output = layer1.mlp(ln2_out)
+                    chunk_activations['layer1_mlp'].append(mlp_output.cpu())
+                    
+                    x = x + mlp_output
+                    
+                    # Final layer norm
+                    x = model.transformer.ln_f(x)
+                    chunk_activations['final_ln'].append(x.cpu())
+                    
+                    # Language model head
+                    lm_output = model.lm_head(x)
+                    chunk_activations['lm_head'].append(lm_output.cpu())
+            except Exception as e:
+                print(f"Error processing batch: {str(e)}")
+                print(traceback.format_exc())
+                continue
         
         # Concatenate and store chunk activations
         for point in probe_points:
-            all_activations[point].append(torch.cat(chunk_activations[point], dim=0))
-        
-        del chunk_activations
-        torch.cuda.empty_cache()
+            if chunk_activations[point]:
+                all_activations[point].append(torch.cat(chunk_activations[point], dim=0))
+            else:
+                print(f"Warning: No activations for {point} in this chunk")
     
     # Concatenate all chunks
     for point in probe_points:
-        all_activations[point] = torch.cat(all_activations[point], dim=0).numpy()
+        if all_activations[point]:
+            all_activations[point] = torch.cat(all_activations[point], dim=0).numpy()
+        else:
+            print(f"Warning: No activations for {point} across all chunks")
+            all_activations[point] = np.array([])
     
     return all_activations
 
-def prepare_labels(games):
+def prepare_labels(text_games):
     """Prepare labels for the tic-tac-toe board states."""
     labels = []
-    for game in games:
+    for game in text_games:
         board = ['-'] * 9
         moves = game[1:].split()
         for i, move in enumerate(moves):
@@ -132,7 +174,7 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=10000)
+        base_clf = LogisticRegression(max_iter=5000)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
@@ -169,14 +211,18 @@ def train_and_evaluate_probing_classifiers(activations, labels):
     
     return results
 
-def process_all_points(model, games, tokenizer, device, labels):
+def process_all_points(model, text_games, device, labels):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
-        all_activations = extract_activations_all_points(model, games, tokenizer, device)
+        all_activations = extract_activations_all_points(model, text_games, device)
         
         all_results = {}
         for point, activations in all_activations.items():
+            if activations.size == 0:
+                print(f"Skipping {point} due to empty activations")
+                continue
+            
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
             
@@ -207,7 +253,6 @@ def process_all_points(model, games, tokenizer, device, labels):
         return all_results
     except Exception as e:
         print(f"Error processing probe points: {str(e)}")
-        print("Traceback:")
         print(traceback.format_exc())
         return None
 
@@ -225,7 +270,7 @@ def generate_graphs(all_results):
     x_ticks = []
     for i, point in enumerate(probe_points):
         if 'layer' in point:
-            layer, component = point.split('_')
+            layer, component = point.split('_', 1)
             x_labels.append(f"{layer}\n{component}")
         else:
             x_labels.append(point)
@@ -239,7 +284,7 @@ def generate_graphs(all_results):
     plt.ylim(0, 1)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('assets/txt_accuracy_across_probe_points.png')
+    plt.savefig('assets/accuracy_across_probe_points.png')
     plt.close()
 
     # Plotting accuracy across positions for each probe point
@@ -253,7 +298,7 @@ def generate_graphs(all_results):
     plt.title('Accuracy Across Board Positions for Each Probe Point (Linear Probing)')
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
-    plt.savefig('assets/txt_accuracy_across_positions_all_points.png')
+    plt.savefig('assets/accuracy_across_positions_all_points.png')
     plt.close()
 
     print("Graphs have been saved in the assets directory.")
@@ -262,28 +307,27 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_2000.pt").to(device)
+    model = load_model("out-img-models/ckpt_iter_2000.pt").to(device)
     
-    with open('data/txt/meta.pkl', 'rb') as f:
-        vocab_info = pickle.load(f)
-    tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])
-    
-    # Load and sample games
+    # Charger les jeux de texte
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row.split(',')[0]}" for row in file.readlines()[1:]]
     
+    # Sélectionner aléatoirement 5% des jeux
     num_games_to_select = len(all_games) // 20
-    games = random.sample(all_games, num_games_to_select)
+    selected_games = random.sample(all_games, num_games_to_select)
     
-    print(f"Processing {len(games)} games (5% of total)")
+    print(f"Processing {len(selected_games)} games (5% of total)")
     
-    labels = prepare_labels(games)
+    labels = prepare_labels(selected_games)
     
-    all_results = process_all_points(model, games, tokenizer, device, labels)
+    all_results = process_all_points(model, selected_games, device, labels)
     
-    print("Probing results for all points saved.")
-
-    generate_graphs(all_results)
+    if all_results:
+        print("Probing results for all points saved.")
+        generate_graphs(all_results)
+    else:
+        print("Error: No results were generated during probing.")
 
 if __name__ == "__main__":
     main()
