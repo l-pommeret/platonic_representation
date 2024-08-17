@@ -22,7 +22,7 @@ def tokenize_and_pad(texts, tokenizer, max_length):
         padded[i, :length] = torch.tensor(seq[:length])
     return padded
 
-def extract_activations_all_points(model, games, tokenizer, device, batch_size=1, chunk_size=25):
+def extract_activations_all_points(model, games, tokenizer, device, batch_size=4, chunk_size=100):
     """Extract activations for all possible points in the model."""
     model.eval()
     max_length = model.config.block_size
