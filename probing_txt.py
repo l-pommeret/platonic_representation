@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from sklearn.model_selection import KFold
-from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
+from sklearn.svm import LinearSVC
+from sklearn.metrics import accuracy_score
 from sklearn.multiclass import OneVsRestClassifier
 from sklearn.preprocessing import StandardScaler
 import pickle
@@ -11,6 +11,7 @@ import os
 import traceback
 import random
 import matplotlib.pyplot as plt
+from PIL import Image
 
 from extract_features import load_model
 
@@ -128,7 +129,7 @@ def prepare_labels(games):
         labels.append(board)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels, max_iter, solver='lbfgs'):
+def train_and_evaluate_probing_classifiers(activations, labels):
     """Train and evaluate probing classifiers for each board position."""
     results = []
     n_splits = 5
@@ -136,21 +137,17 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter, solver
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
     
-    # Prétraitement des données
-    scaler = StandardScaler()
-    activations_scaled = scaler.fit_transform(activations)
-    
     for position in range(9):
         y = labels[:, position]
-        base_clf = LogisticRegression(max_iter=max_iter, solver=solver, n_jobs=-1)
+        base_clf = LogisticRegression(max_iter=1000)
         clf = OneVsRestClassifier(base_clf)
         
         kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
         train_metrics = []
         val_metrics = []
         
-        for train_index, val_index in kf.split(activations_scaled):
-            X_train, X_val = activations_scaled[train_index], activations_scaled[val_index]
+        for train_index, val_index in kf.split(activations):
+            X_train, X_val = activations[train_index], activations[val_index]
             y_train, y_val = y[train_index], y[val_index]
             
             clf.fit(X_train, y_train)
@@ -179,7 +176,7 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter, solver
     
     return results
 
-def process_all_points(model, games, tokenizer, device, labels, max_iter=1000, solver='lbfgs'):
+def process_all_points(model, games, tokenizer, device, labels):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
@@ -194,7 +191,7 @@ def process_all_points(model, games, tokenizer, device, labels, max_iter=1000, s
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
             
-            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter, solver=solver)
+            results = train_and_evaluate_probing_classifiers(activations, labels)
             
             print(f"Probe point: {point}")
             avg_train_accuracy = 0
@@ -306,8 +303,7 @@ def main():
     
     labels = prepare_labels(games)
     
-    # Augmenter le nombre d'itérations et changer le solveur si nécessaire
-    all_results = process_all_points(model, games, tokenizer, device, labels, max_iter=10000, solver='saga')
+    all_results = process_all_points(model, games, tokenizer, device, labels)
     
     if all_results:
         print("Probing results for all points saved.")
