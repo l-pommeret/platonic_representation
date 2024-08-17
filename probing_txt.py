@@ -128,7 +128,7 @@ def prepare_labels(games):
         labels.append(board)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000, solver='lbfgs'):
+def train_and_evaluate_probing_classifiers(activations, labels, max_iter, solver='lbfgs'):
     """Train and evaluate probing classifiers for each board position."""
     results = []
     n_splits = 5
@@ -179,7 +179,7 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000, s
     
     return results
 
-def process_all_points(model, games, tokenizer, device, labels, max_iter=5000, solver='lbfgs'):
+def process_all_points(model, games, tokenizer, device, labels, max_iter=1000, solver='lbfgs'):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
