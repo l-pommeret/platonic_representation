@@ -31,13 +31,13 @@ def load_and_process_image(file_path):
         data = np.array(img)
         
         # Convertir les valeurs de pixel en tokens
-        data = np.where(data == X, META['stoi']['blanc'],
-                np.where(data == O, META['stoi']['noir'],
-                np.where(data == EMPTY, META['stoi']['gris'], META['stoi']['gris'])))
+        data = np.where(data == X, META['stoi']['b'],
+                np.where(data == O, META['stoi']['n'],
+                np.where(data == EMPTY, META['stoi']['g'], META['stoi']['gris'])))
         
         # Créer le vecteur avec le token de début
         vector = np.zeros(VECTOR_SIZE, dtype=DTYPE)
-        vector[0] = META['stoi']['début']  # Ajouter le token de début
+        vector[0] = META['stoi'][';']  # Ajouter le token de début
         
         # Parcours en serpentin
         index = 1  # Commencer à l'index 1 car l'index 0 est le token de début
