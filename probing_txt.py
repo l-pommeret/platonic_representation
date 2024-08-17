@@ -22,18 +22,28 @@ def tokenize_and_pad(texts, tokenizer, max_length):
         padded[i, :length] = torch.tensor(seq[:length])
     return padded
 
+def get_probe_points(model):
+    """Dynamically generate probe points based on model architecture."""
+    probe_points = ['embedding']
+    
+    num_layers = len(model.transformer.h)
+    for layer in range(num_layers):
+        probe_points.extend([
+            f'layer{layer}_pre_attn_norm',
+            f'layer{layer}_attn',
+            f'layer{layer}_pre_ffn_norm',
+            f'layer{layer}_mlp'
+        ])
+    
+    probe_points.extend(['final_ln', 'lm_head'])
+    return probe_points
+
 def extract_activations_all_points(model, games, tokenizer, device, batch_size=4, chunk_size=100):
     """Extract activations for all possible points in the model."""
     model.eval()
     max_length = model.config.block_size
     
-    probe_points = [
-        'embedding',
-        'layer0_pre_attn_norm', 'layer0_attn', 'layer0_pre_ffn_norm', 'layer0_mlp',
-        'layer1_pre_attn_norm', 'layer1_attn', 'layer1_pre_ffn_norm', 'layer1_mlp',
-        'final_ln',
-        'lm_head'
-    ]
+    probe_points = get_probe_points(model)
     
     all_activations = {point: [] for point in probe_points}
     
@@ -54,39 +64,22 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
                 
                 x = model.transformer.drop(embedding)
                 
-                # Layer 0
-                layer0 = model.transformer.h[0]
-                ln1_out = layer0.ln_1(x)
-                chunk_activations['layer0_pre_attn_norm'].append(ln1_out.cpu())
-                
-                attn_output = layer0.attn(ln1_out)
-                chunk_activations['layer0_attn'].append(attn_output.cpu())
-                
-                x = x + attn_output
-                ln2_out = layer0.ln_2(x)
-                chunk_activations['layer0_pre_ffn_norm'].append(ln2_out.cpu())
-                
-                mlp_output = layer0.mlp(ln2_out)
-                chunk_activations['layer0_mlp'].append(mlp_output.cpu())
-                
-                x = x + mlp_output
-                
-                # Layer 1
-                layer1 = model.transformer.h[1]
-                ln1_out = layer1.ln_1(x)
-                chunk_activations['layer1_pre_attn_norm'].append(ln1_out.cpu())
-                
-                attn_output = layer1.attn(ln1_out)
-                chunk_activations['layer1_attn'].append(attn_output.cpu())
-                
-                x = x + attn_output
-                ln2_out = layer1.ln_2(x)
-                chunk_activations['layer1_pre_ffn_norm'].append(ln2_out.cpu())
-                
-                mlp_output = layer1.mlp(ln2_out)
-                chunk_activations['layer1_mlp'].append(mlp_output.cpu())
-                
-                x = x + mlp_output
+                # Process all layers
+                for layer_idx, layer in enumerate(model.transformer.h):
+                    ln1_out = layer.ln_1(x)
+                    chunk_activations[f'layer{layer_idx}_pre_attn_norm'].append(ln1_out.cpu())
+                    
+                    attn_output = layer.attn(ln1_out)
+                    chunk_activations[f'layer{layer_idx}_attn'].append(attn_output.cpu())
+                    
+                    x = x + attn_output
+                    ln2_out = layer.ln_2(x)
+                    chunk_activations[f'layer{layer_idx}_pre_ffn_norm'].append(ln2_out.cpu())
+                    
+                    mlp_output = layer.mlp(ln2_out)
+                    chunk_activations[f'layer{layer_idx}_mlp'].append(mlp_output.cpu())
+                    
+                    x = x + mlp_output
                 
                 # Final layer norm
                 x = model.transformer.ln_f(x)
@@ -225,7 +218,7 @@ def generate_graphs(all_results):
     x_ticks = []
     for i, point in enumerate(probe_points):
         if 'layer' in point:
-            layer, component = point.split('_')
+            layer, component = point.split('_', 1)
             x_labels.append(f"{layer}\n{component}")
         else:
             x_labels.append(point)
@@ -254,6 +247,20 @@ def generate_graphs(all_results):
     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
     plt.tight_layout()
     plt.savefig('assets/txt_accuracy_across_positions_all_points.png')
+    plt.close()
+
+    # New: Heatmap of accuracies
+    accuracies = np.array([[result['val_accuracy'] for result in results] for results in all_results.values()])
+    plt.figure(figsize=(15, 10))
+    plt.imshow(accuracies, cmap='viridis', aspect='auto')
+    plt.colorbar(label='Validation Accuracy')
+    plt.xlabel('Board Position')
+    plt.ylabel('Probe Point')
+    plt.title('Heatmap of Accuracies Across Probe Points and Board Positions')
+    plt.yticks(range(len(probe_points)), x_labels)
+    plt.xticks(range(9), positions)
+    plt.tight_layout()
+    plt.savefig('assets/txt_accuracy_heatmap.png')
     plt.close()
 
     print("Graphs have been saved in the assets directory.")
