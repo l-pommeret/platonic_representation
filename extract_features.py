@@ -1,8 +1,4 @@
 import torch
-import argparse
-from tqdm import tqdm
-import os
-import pickle
 
 # Import your GPT model and config
 from model import GPT, GPTConfig
