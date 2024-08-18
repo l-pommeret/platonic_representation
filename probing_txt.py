@@ -258,7 +258,7 @@ def generate_graphs(all_results):
             plt.figure(figsize=(8, 6))
             sns.heatmap(accuracies_matrix, annot=True, cmap='viridis', vmin=0, vmax=1)
             plt.title(f'Tic-Tac-Toe Board Heatmap - {point}')
-            plt.savefig(f'assets/ttt_heatmap_{point}.png')
+            plt.savefig(f'assets/heatmaps/ttt_heatmap_{point}.png')
             plt.close()
 
     print("Tic-Tac-Toe board heatmaps have been saved in the assets directory.")
@@ -278,7 +278,7 @@ def main():
         all_games = [f";{row.split(',')[0]}" for row in file]
 
     random.shuffle(all_games)
-    games = all_games[:10000]  # Sample 10000 games for processing
+    games = all_games[:50000]  # Sample 50000 games for processing
 
     labels = prepare_labels(games)
     all_results = process_all_points(model, games, tokenizer, device, labels)

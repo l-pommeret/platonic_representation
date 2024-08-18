@@ -327,7 +327,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-img-models/ckpt_iter_3000.pt").to(device)
+    model = load_model("out-img-models/ckpt_iter_2000.pt").to(device)
 
     # Load and sample games
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
