@@ -8,7 +8,7 @@ INPUT_DIR = "data/img/files"  # Dossier contenant les images
 TRAIN_OUTPUT = "data/img/train.bin"
 VAL_OUTPUT = "data/img/val.bin"
 TRAIN_RATIO = 0.05
-IMAGE_SIZE = 9  # 12x12 pixels
+IMAGE_SIZE = 9  # 9x9 pixels
 VECTOR_SIZE = IMAGE_SIZE * IMAGE_SIZE + 1  # +1 pour le token de début
 DTYPE = np.uint8
 
@@ -16,7 +16,6 @@ DTYPE = np.uint8
 EMPTY = 128  # Gris
 O = 0        # Noir
 X = 255      # Blanc
-SEPARATOR = 128  # Gris
 
 # Dictionnaire de conversion
 META = {
@@ -24,38 +23,32 @@ META = {
     'itos': {0: 'b', 1: 'n', 2: 'g', 3: ';'}
 }
 
-def load_and_process_image(file_path):
-    with Image.open(file_path) as img:
-        img = img.convert('L')  # Convertir en niveaux de gris
-        img = img.resize((IMAGE_SIZE, IMAGE_SIZE))  # Redimensionner à 12x12
-        data = np.array(img)
-        
-        # Convertir les valeurs de pixel en tokens
-        data = np.where(data == X, META['stoi']['b'],
-                np.where(data == O, META['stoi']['n'],
-                np.where(data == EMPTY, META['stoi']['g'], META['stoi']['g'])))
-        
-        # Créer le vecteur avec le token de début
-        vector = np.zeros(VECTOR_SIZE, dtype=DTYPE)
-        vector[0] = META['stoi'][';']  # Ajouter le token de début
-        
-        # Parcours en serpentin
-        index = 1  # Commencer à l'index 1 car l'index 0 est le token de début
-        for i in range(IMAGE_SIZE):
-            if i % 2 == 0:
-                vector[index:index+IMAGE_SIZE] = data[i]
-            else:
-                vector[index:index+IMAGE_SIZE] = data[i][::-1]
-            index += IMAGE_SIZE
-        
-        return vector
+def load_and_process_image(img):
+    img = img.convert('L')  # Convertir en niveaux de gris
+    img = img.resize((IMAGE_SIZE, IMAGE_SIZE))  # Redimensionner à 9x9
+    data = np.array(img)
+    
+    # Convertir les valeurs de pixel en tokens
+    data = np.where(data == X, META['stoi']['b'],
+            np.where(data == O, META['stoi']['n'],
+            np.where(data == EMPTY, META['stoi']['g'], META['stoi']['g'])))
+    
+    # Créer le vecteur avec le token de début
+    vector = np.zeros(VECTOR_SIZE, dtype=DTYPE)
+    vector[0] = META['stoi'][';']  # Ajouter le token de début
+    
+    # Parcours normal (ligne par ligne, de haut en bas, de gauche à droite)
+    vector[1:] = data.flatten()
+    
+    return vector
 
 def process_data(input_dir):
     all_data = []
     for filename in tqdm(os.listdir(input_dir), desc="Traitement des images"):
         if filename.endswith(('.png', '.jpg', '.jpeg')):
             file_path = os.path.join(input_dir, filename)
-            vector = load_and_process_image(file_path)
+            with Image.open(file_path) as img:
+                vector = load_and_process_image(img)
             all_data.append(vector)
     return np.array(all_data)
 
@@ -86,10 +79,7 @@ def load_and_print_batches(filename, start_batch=0, end_batch=10, batch_size=VEC
         print("Décodé:")
         print(f"Token de début: {META['itos'][batch[0]]}")
         for row in range(IMAGE_SIZE):
-            if row % 2 == 0:
-                print(''.join(META['itos'][token] for token in batch[1+row*IMAGE_SIZE:1+(row+1)*IMAGE_SIZE]))
-            else:
-                print(''.join(META['itos'][token] for token in batch[1+(row+1)*IMAGE_SIZE:1+row*IMAGE_SIZE:-1]))
+            print(''.join(META['itos'][token] for token in batch[1+row*IMAGE_SIZE:1+(row+1)*IMAGE_SIZE]))
         print()
 
 def main():

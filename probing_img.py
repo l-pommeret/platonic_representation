@@ -15,6 +15,7 @@ from PIL import Image
 
 from extract_features import load_model
 from img_game_generator import create_board_image
+from data.img.prepare_img import load_and_process_image
 
 # Configuration
 IMAGE_SIZE = 9
@@ -29,29 +30,6 @@ def text_to_image(text_game):
     moves = text_game[1:].split()  # Remove the leading semicolon and split
     img = create_board_image(moves)
     return img
-
-def load_and_process_image(img):
-    """Process a PIL Image object."""
-    img = img.convert('L')
-    img = img.resize((IMAGE_SIZE, IMAGE_SIZE))
-    data = np.array(img)
-    
-    data = np.where(data == 255, META['stoi']['b'],
-                    np.where(data == 0, META['stoi']['n'],
-                             META['stoi']['g']))
-    
-    vector = np.zeros(VECTOR_SIZE, dtype=np.int64)
-    vector[0] = META['stoi'][';']
-    
-    index = 1
-    for i in range(IMAGE_SIZE):
-        if i % 2 == 0:
-            vector[index:index+IMAGE_SIZE] = data[i]
-        else:
-            vector[index:index+IMAGE_SIZE] = data[i][::-1]
-        index += IMAGE_SIZE
-    
-    return vector
 
 def get_probe_points(model):
     """Dynamically generate probe points based on model architecture."""
