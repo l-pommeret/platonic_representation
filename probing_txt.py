@@ -234,7 +234,7 @@ def generate_graphs(all_results):
     plt.ylabel('Average Validation Accuracy')
     plt.title('Average Accuracy Across Probe Points (Linear Probing)')
     plt.xticks(x_ticks, x_labels, rotation=45, ha='right')
-    plt.ylim(0, 1)
+    plt.ylim(0.45, 1)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig('assets/txt_accuracy_across_probe_points.png')
