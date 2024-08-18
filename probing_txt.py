@@ -278,7 +278,7 @@ def main():
         all_games = [f";{row.split(',')[0]}" for row in file]
 
     random.shuffle(all_games)
-    games = all_games[:50000]  # Sample 50000 games for processing
+    games = all_games[:10000]  # Sample 50000 games for processing
 
     labels = prepare_labels(games)
     all_results = process_all_points(model, games, tokenizer, device, labels)
