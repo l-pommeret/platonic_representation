@@ -11,20 +11,32 @@ def create_board_image(moves):
     img = Image.new('L', (9, 9), color=EMPTY)
     draw = ImageDraw.Draw(img)
 
-    # Dictionnaire pour les couleurs des joueurs
-    color_map = {'X': X, 'O': O}
+    # Fonction pour dessiner un carré 3x3
+    def draw_3x3(start_x, start_y, board):
+        for i in range(3):
+            for j in range(3):
+                color = EMPTY
+                if board[i][j] == 'O':
+                    color = O
+                elif board[i][j] == 'X':
+                    color = X
+                draw.point((start_x + j, start_y + i), fill=color)
 
-    # Parcourir les mouvements pour dessiner les pièces
+    # Initialiser le plateau
+    board = [[' ' for _ in range(3)] for _ in range(3)]
+
+    # Remplir le plateau selon les mouvements
     for i, move in enumerate(moves):
         player = 'X' if i % 2 == 0 else 'O'
         row, col = int(move[1]) - 1, int(move[2]) - 1
+        board[row][col] = player
 
-        # Calculer la position sur l'image
-        pixel_x = col + (i % 3) * 3
-        pixel_y = row + (i // 3) * 3
+        # Calculer la position du sous-plateau 3x3
+        sub_x = (i % 3) * 3
+        sub_y = (i // 3) * 3
 
-        # Dessiner la pièce
-        draw.point((pixel_x, pixel_y), fill=color_map[player])
+        # Dessiner le sous-plateau 3x3
+        draw_3x3(sub_x, sub_y, board)
 
     return img
 
@@ -44,3 +56,5 @@ csv_file = 'data/txt/all_tic_tac_toe_games.csv'
 output_prefix = 'data/img/files/game'
 generate_game_images(csv_file, output_prefix)
 print("Génération d'images terminée.")
+
+
