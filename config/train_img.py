@@ -9,21 +9,21 @@ always_save_checkpoint = True
 
 wandb_log = True
 wandb_project = "platonic-tic-tac-toe"
-wandb_run_name = "1_layers"
+wandb_run_name = "IMG_1_layer"
 
 dataset = "img"
 gradient_accumulation_steps = 1
-batch_size = 256
+batch_size = 512
 block_size = 144  # context of up to 1023 tokens (because dataset block size is 1024)
 
 # baby GPT model :)
-n_layer = 2
+n_layer = 1
 n_head = 2
 n_embd = 256
 dropout = 0.0
 
 learning_rate = 3e-4
-max_iters = 3000
+max_iters = 5000
 lr_decay_iters = max_iters  # make equal to max_iters usually
 min_lr = 3e-5  # learning_rate / 10 usually
 beta2 = 0.95  # make a bit bigger because number of tokens per iter is small
