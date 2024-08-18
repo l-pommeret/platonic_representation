@@ -8,7 +8,7 @@ INPUT_DIR = "data/img/files"  # Dossier contenant les images
 TRAIN_OUTPUT = "data/img/train.bin"
 VAL_OUTPUT = "data/img/val.bin"
 TRAIN_RATIO = 0.05
-IMAGE_SIZE = 12  # 12x12 pixels
+IMAGE_SIZE = 9  # 12x12 pixels
 VECTOR_SIZE = IMAGE_SIZE * IMAGE_SIZE + 1  # +1 pour le token de début
 DTYPE = np.uint8
 

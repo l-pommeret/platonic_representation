@@ -17,11 +17,11 @@ from extract_features import load_model
 from img_game_generator import create_board_image
 
 # Configuration
-IMAGE_SIZE = 12
+IMAGE_SIZE = 9
 VECTOR_SIZE = IMAGE_SIZE * IMAGE_SIZE + 1
 META = {
-    'stoi': {'blanc': 0, 'noir': 1, 'gris': 2, 'début': 3},
-    'itos': {0: 'blanc', 1: 'noir', 2: 'gris', 3: 'début'}
+    'stoi': {'b': 0, 'n': 1, 'g': 2, ';': 3},
+    'itos': {0: 'b', 1: 'n', 2: 'g', 3: ';'}
 }
 
 def text_to_image(text_game):
@@ -36,12 +36,12 @@ def load_and_process_image(img):
     img = img.resize((IMAGE_SIZE, IMAGE_SIZE))
     data = np.array(img)
     
-    data = np.where(data == 255, META['stoi']['blanc'],
-                    np.where(data == 0, META['stoi']['noir'],
-                             META['stoi']['gris']))
+    data = np.where(data == 255, META['stoi']['b'],
+                    np.where(data == 0, META['stoi']['n'],
+                             META['stoi']['g']))
     
     vector = np.zeros(VECTOR_SIZE, dtype=np.int64)
-    vector[0] = META['stoi']['début']
+    vector[0] = META['stoi'][';']
     
     index = 1
     for i in range(IMAGE_SIZE):
