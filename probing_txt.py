@@ -11,13 +11,14 @@ import os
 import traceback
 import random
 import matplotlib.pyplot as plt
+import csv
+import seaborn as sns
 
 from extract_features import load_model, tokenize_and_pad
 
 def get_probe_points(model):
     """Dynamically generate probe points based on model architecture."""
     probe_points = ['embedding']
-
     num_layers = len(model.transformer.h)
     for layer in range(num_layers):
         probe_points.extend([
@@ -28,7 +29,6 @@ def get_probe_points(model):
             f'layer{layer}_mlp_fc',
             f'layer{layer}_mlp_proj'
         ])
-
     probe_points.extend(['final_ln', 'lm_head'])
     return probe_points
 
@@ -38,14 +38,11 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
     max_length = model.config.block_size
 
     probe_points = get_probe_points(model)
-
     all_activations = {point: [] for point in probe_points}
 
     for chunk_start in tqdm(range(0, len(games), chunk_size), desc="Processing chunks"):
         chunk_end = min(chunk_start + chunk_size, len(games))
         chunk_games = games[chunk_start:chunk_end]
-
-        chunk_activations = {point: [] for point in probe_points}
 
         for i in range(0, len(chunk_games), batch_size):
             batch = chunk_games[i:i+batch_size]
@@ -54,52 +51,37 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
             with torch.no_grad():
                 # Embedding
                 embedding = model.transformer.wte(input_ids) + model.transformer.wpe(torch.arange(input_ids.size(1), device=device))
-                chunk_activations['embedding'].append(embedding.cpu())
-
                 x = model.transformer.drop(embedding)
+
+                all_activations['embedding'].append(embedding.cpu())
 
                 # Process all layers
                 for layer_idx, block in enumerate(model.transformer.h):
                     ln1_out = block.ln_1(x)
-                    chunk_activations[f'layer{layer_idx}_pre_attn_norm'].append(ln1_out.cpu())
-
                     attn_output = block.attn(ln1_out)
-                    chunk_activations[f'layer{layer_idx}_attn'].append(attn_output.cpu())
-
                     x = x + attn_output
-                    chunk_activations[f'layer{layer_idx}_post_attn'].append(x.cpu())
 
                     ln2_out = block.ln_2(x)
-                    chunk_activations[f'layer{layer_idx}_pre_ffn_norm'].append(ln2_out.cpu())
-
-                    # MLP layers
-                    mlp_fc = block.mlp.c_fc(ln2_out)
-                    chunk_activations[f'layer{layer_idx}_mlp_fc'].append(mlp_fc.cpu())
-
                     mlp_output = block.mlp(ln2_out)
-                    chunk_activations[f'layer{layer_idx}_mlp_proj'].append(mlp_output.cpu())
-
                     x = x + mlp_output
 
-                # Final layer norm
+                    # Store activations
+                    all_activations[f'layer{layer_idx}_pre_attn_norm'].append(ln1_out.cpu())
+                    all_activations[f'layer{layer_idx}_attn'].append(attn_output.cpu())
+                    all_activations[f'layer{layer_idx}_post_attn'].append(x.cpu())
+                    all_activations[f'layer{layer_idx}_pre_ffn_norm'].append(ln2_out.cpu())
+                    all_activations[f'layer{layer_idx}_mlp_fc'].append(block.mlp.c_fc(ln2_out).cpu())
+                    all_activations[f'layer{layer_idx}_mlp_proj'].append(mlp_output.cpu())
+
+                # Final layer norm and language model head
                 x = model.transformer.ln_f(x)
-                chunk_activations['final_ln'].append(x.cpu())
-
-                # Language model head
-                lm_output = model.lm_head(x)
-                chunk_activations['lm_head'].append(lm_output.cpu())
-
-        # Concatenate and store chunk activations
-        for point in probe_points:
-            if chunk_activations[point]:
-                all_activations[point].append(torch.cat(chunk_activations[point], dim=0))
-            else:
-                print(f"Warning: No activations for {point} in this chunk")
+                all_activations['final_ln'].append(x.cpu())
+                all_activations['lm_head'].append(model.lm_head(x).cpu())
 
     # Concatenate all chunks
-    for point in probe_points:
-        if all_activations[point]:
-            all_activations[point] = torch.cat(all_activations[point], dim=0).numpy()
+    for point, activations in all_activations.items():
+        if activations:
+            all_activations[point] = torch.cat(activations, dim=0).numpy()
         else:
             print(f"Warning: No activations for {point} across all chunks")
             all_activations[point] = np.array([])
@@ -108,16 +90,14 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
 
 def prepare_labels(games):
     """Prepare labels for the tic-tac-toe board states."""
-    labels = []
-    for game in games:
-        board = ['-'] * 9
+    labels = np.full((len(games), 9), '-')
+    for idx, game in enumerate(games):
         moves = game[1:].split()
         for i, move in enumerate(moves):
             player = 'X' if i % 2 == 0 else 'O'
             position = int(move[1]) - 1 + 3 * (int(move[2]) - 1)
-            board[position] = player
-        labels.append(board)
-    return np.array(labels)
+            labels[idx, position] = player
+    return labels
 
 def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
     """Train and evaluate probing classifiers for each board position using LinearSVC."""
@@ -149,17 +129,13 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
             train_pred = clf.predict(X_train)
             val_pred = clf.predict(X_val)
 
-            train_metrics.append({
-                'accuracy': accuracy_score(y_train, train_pred)
-            })
-            val_metrics.append({
-                'accuracy': accuracy_score(y_val, val_pred)
-            })
+            train_metrics.append(accuracy_score(y_train, train_pred))
+            val_metrics.append(accuracy_score(y_val, val_pred))
 
         results.append({
             'position': position,
-            'train_accuracy': np.mean([m['accuracy'] for m in train_metrics]),
-            'val_accuracy': np.mean([m['accuracy'] for m in val_metrics])
+            'train_accuracy': np.mean(train_metrics),
+            'val_accuracy': np.mean(val_metrics)
         })
 
     return results
@@ -181,18 +157,9 @@ def process_all_points(model, games, tokenizer, device, labels, max_iter=1000):
 
             results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter)
 
-            print(f"Probe point: {point}")
-            avg_train_accuracy = 0
-            avg_val_accuracy = 0
-            for pos_result in results:
-                print(f"  Position {pos_result['position'] + 1}:")
-                print(f"    Train Accuracy: {pos_result['train_accuracy']:.4f}")
-                print(f"    Validation Accuracy: {pos_result['val_accuracy']:.4f}")
-                avg_train_accuracy += pos_result['train_accuracy']
-                avg_val_accuracy += pos_result['val_accuracy']
+            avg_train_accuracy = np.mean([result['train_accuracy'] for result in results])
+            avg_val_accuracy = np.mean([result['val_accuracy'] for result in results])
 
-            avg_train_accuracy /= 9
-            avg_val_accuracy /= 9
             print(f"\n{point} Summary:")
             print(f"  Average Train Accuracy: {avg_train_accuracy:.4f}")
             print(f"  Average Validation Accuracy: {avg_val_accuracy:.4f}")
@@ -254,7 +221,7 @@ def generate_graphs(all_results):
     plt.savefig('assets/txt_accuracy_across_positions_all_points.png')
     plt.close()
 
-    # New: Heatmap of accuracies
+    # Heatmap of accuracies
     accuracies = np.array([[result['val_accuracy'] for result in results] for results in all_results.values()])
     plt.figure(figsize=(15, 10))
     plt.imshow(accuracies, cmap='viridis', aspect='auto')
@@ -270,11 +237,37 @@ def generate_graphs(all_results):
 
     print("Graphs have been saved in the assets directory.")
 
+    # Generate CSV file
+    with open('validation_accuracy.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        header = ['Probe Point'] + [f'Position {i}' for i in range(1, 10)]
+        writer.writerow(header)
+
+        for point, results in all_results.items():
+            row = [point] + [result['val_accuracy'] for result in results]
+            writer.writerow(row)
+
+    print("CSV file 'validation_accuracy.csv' has been generated.")
+
+    # Generate heatmaps for each layer
+    for point, results in all_results.items():
+        if 'layer' in point:
+            accuracies = [result['val_accuracy'] for result in results]
+            accuracies_matrix = np.array(accuracies).reshape(3, 3)
+
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(accuracies_matrix, annot=True, cmap='viridis', vmin=0, vmax=1)
+            plt.title(f'Tic-Tac-Toe Board Heatmap - {point}')
+            plt.savefig(f'assets/ttt_heatmap_{point}.png')
+            plt.close()
+
+    print("Tic-Tac-Toe board heatmaps have been saved in the assets directory.")
+
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_5000-.pt").to(device)
 
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
@@ -282,22 +275,16 @@ def main():
 
     # Load and sample games
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
-        all_games = [f";{row.split(',')[0]}" for row in file.readlines()[1:]]
+        all_games = [f";{row.split(',')[0]}" for row in file]
 
-    num_games_to_select = len(all_games) // 20
-    games = random.sample(all_games, num_games_to_select)
-
-    print(f"Processing {len(games)} games (5% of total)")
+    random.shuffle(all_games)
+    games = all_games[:10000]  # Sample 10000 games for processing
 
     labels = prepare_labels(games)
-
-    all_results = process_all_points(model, games, tokenizer, device, labels, max_iter=1000)
-
+    all_results = process_all_points(model, games, tokenizer, device, labels)
+    
     if all_results:
-        print("Probing results for all points saved.")
         generate_graphs(all_results)
-    else:
-        print("Error: No results were generated during probing.")
 
 if __name__ == "__main__":
     main()

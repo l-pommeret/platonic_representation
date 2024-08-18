@@ -11,6 +11,8 @@ import os
 import traceback
 import random
 import matplotlib.pyplot as plt
+import csv
+import seaborn as sns
 from PIL import Image
 
 from extract_features import load_model
@@ -238,11 +240,11 @@ def generate_graphs(all_results):
     """Generate and save graphs for probing results."""
     probe_points = list(all_results.keys())
     positions = list(range(1, 10))
-    
+
     # Plotting average accuracy across probe points
     plt.figure(figsize=(15, 8))
     avg_accuracies = [np.mean([result['val_accuracy'] for result in results]) for results in all_results.values()]
-    
+
     # Create custom x-axis labels
     x_labels = []
     x_ticks = []
@@ -253,13 +255,13 @@ def generate_graphs(all_results):
         else:
             x_labels.append(point)
         x_ticks.append(i)
-    
+
     plt.plot(x_ticks, avg_accuracies, marker='o')
     plt.xlabel('Probe Point')
     plt.ylabel('Average Validation Accuracy')
     plt.title('Average Accuracy Across Probe Points (Linear Probing)')
     plt.xticks(x_ticks, x_labels, rotation=45, ha='right')
-    plt.ylim(0, 1)
+    plt.ylim(0.45, 1)
     plt.grid(True)
     plt.tight_layout()
     plt.savefig('assets/img_accuracy_across_probe_points.png')
@@ -279,7 +281,7 @@ def generate_graphs(all_results):
     plt.savefig('assets/img_accuracy_across_positions_all_points.png')
     plt.close()
 
-    # New: Heatmap of accuracies
+    # Heatmap of accuracies
     accuracies = np.array([[result['val_accuracy'] for result in results] for results in all_results.values()])
     plt.figure(figsize=(15, 10))
     plt.imshow(accuracies, cmap='viridis', aspect='auto')
@@ -295,31 +297,50 @@ def generate_graphs(all_results):
 
     print("Graphs have been saved in the assets directory.")
 
+    # Generate CSV file
+    with open('img_validation_accuracy.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        header = ['Probe Point'] + [f'Position {i}' for i in range(1, 10)]
+        writer.writerow(header)
+
+        for point, results in all_results.items():
+            row = [point] + [result['val_accuracy'] for result in results]
+            writer.writerow(row)
+
+    print("CSV file 'img_validation_accuracy.csv' has been generated.")
+
+    # Generate heatmaps for each layer
+    for point, results in all_results.items():
+        if 'layer' in point:
+            accuracies = [result['val_accuracy'] for result in results]
+            accuracies_matrix = np.array(accuracies).reshape(3, 3)
+
+            plt.figure(figsize=(8, 6))
+            sns.heatmap(accuracies_matrix, annot=True, cmap='viridis', vmin=0, vmax=1)
+            plt.title(f'Tic-Tac-Toe Board Heatmap - {point}')
+            plt.savefig(f'assets/img_ttt_heatmap_{point}.png')
+            plt.close()
+
+    print("Tic-Tac-Toe board heatmaps have been saved in the assets directory.")
+
 def main():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
     model = load_model("out-img-models/ckpt_iter_3000.pt").to(device)
-    
-    # Charger les jeux de texte
+
+    # Load and sample games
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
-        all_games = [f";{row.split(',')[0]}" for row in file.readlines()[1:]]
-    
-    # Sélectionner aléatoirement 5% des jeux
-    num_games_to_select = len(all_games) // 20
-    selected_games = random.sample(all_games, num_games_to_select)
-    
-    print(f"Processing {len(selected_games)} games (5% of total)")
-    
-    labels = prepare_labels(selected_games)
-    
-    all_results = process_all_points(model, selected_games, device, labels, max_iter=1000)
+        all_games = [f";{row.split(',')[0]}" for row in file]
+
+    random.shuffle(all_games)
+    games = all_games[:10000]  # Sample 10000 games for processing
+
+    labels = prepare_labels(games)
+    all_results = process_all_points(model, games, device, labels)
     
     if all_results:
-        print("Probing results for all points saved.")
         generate_graphs(all_results)
-    else:
-        print("Error: No results were generated during probing.")
 
 if __name__ == "__main__":
     main()
