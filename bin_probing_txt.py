@@ -32,7 +32,7 @@ def get_probe_points(model):
     probe_points.extend(['final_ln', 'lm_head'])
     return probe_points
 
-def extract_activations_all_points(model, games, tokenizer, device, batch_size=4, chunk_size=100):
+def extract_activations_all_points(model, partial_games, tokenizer, device, batch_size=4, chunk_size=100):
     """Extract activations for all possible points in the model."""
     model.eval()
     max_length = model.config.block_size
@@ -40,9 +40,9 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
     probe_points = get_probe_points(model)
     all_activations = {point: [] for point in probe_points}
 
-    for chunk_start in tqdm(range(0, len(games), chunk_size), desc="Processing chunks"):
-        chunk_end = min(chunk_start + chunk_size, len(games))
-        chunk_games = games[chunk_start:chunk_end]
+    for chunk_start in tqdm(range(0, len(partial_games), chunk_size), desc="Processing chunks"):
+        chunk_end = min(chunk_start + chunk_size, len(partial_games))
+        chunk_games = partial_games[chunk_start:chunk_end]
 
         for i in range(0, len(chunk_games), batch_size):
             batch = chunk_games[i:i+batch_size]
@@ -88,16 +88,49 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
 
     return all_activations
 
-def prepare_labels(games):
-    """Prepare labels for the tic-tac-toe board states."""
-    labels = np.full((len(games), 9), '-')
-    for idx, game in enumerate(games):
-        moves = game[1:].split()
-        for i, move in enumerate(moves):
-            player = 'X' if i % 2 == 0 else 'O'
-            position = int(move[1]) - 1 + 3 * (int(move[2]) - 1)
-            labels[idx, position] = player
-    return labels
+def print_board(board):
+    """Print the tic-tac-toe board."""
+    print("-------------")
+    for i in range(3):
+        print(f"| {board[i*3]} | {board[i*3+1]} | {board[i*3+2]} |")
+        print("-------------")
+
+def prepare_partial_games_and_labels(games, num_games_to_print=5):
+    """Prepare partial games and labels for the tic-tac-toe board states."""
+    partial_games = []
+    labels = []
+    
+    for game_index, game in enumerate(games):
+        moves = game.split()
+        board = ['-'] * 9
+        
+        if game_index < num_games_to_print:
+            print(f"\nGame {game_index + 1}:")
+        
+        for i in range(len(moves) + 1):  # +1 to include the final state
+            if i > 0:
+                move = moves[i-1]
+                player = 'X' if (i-1) % 2 == 0 else 'O'
+                position = int(move[1]) - 1 + 3 * (int(move[2]) - 1)
+                board[position] = player
+            
+            partial_game = ';' + ' '.join(moves[:i]) + ' '  # Add space at the end
+            partial_games.append(partial_game)
+            labels.append(board.copy())
+            
+            if game_index < num_games_to_print:
+                print(f"\nMove {i}:")
+                print(f"Partial game: {partial_game}")
+                print("Board state:")
+                print_board(board)
+    
+    return partial_games, np.array(labels)
+
+def print_all_partial_games(partial_games):
+    """Print all partial games that will be given to the model."""
+    print("\nAll partial games to be probed:")
+    for i, game in enumerate(partial_games):
+        print(f"{i+1}: {game}")
 
 def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
     """Train and evaluate probing classifiers for each board position using LinearSVC."""
@@ -107,7 +140,7 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
 
-    # Normalisation des activations
+    # Normalize activations
     scaler = StandardScaler()
     activations_normalized = scaler.fit_transform(activations)
 
@@ -140,11 +173,11 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
 
     return results
 
-def process_all_points(model, games, tokenizer, device, labels, max_iter=1000):
+def process_all_points(model, partial_games, tokenizer, device, labels, max_iter=1000):
     """Process all probe points: extract activations and train probing classifiers."""
     try:
         print("Starting to process all probe points")
-        all_activations = extract_activations_all_points(model, games, tokenizer, device)
+        all_activations = extract_activations_all_points(model, partial_games, tokenizer, device)
 
         all_results = {}
         for point, activations in all_activations.items():
@@ -267,21 +300,28 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_0.pt").to(device)
 
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
     tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])
 
-    # Load and sample games
+    # Load and sample games, removing the result part
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
-        all_games = [f";{row.split(';')[0]}" for row in file]
+        all_games = [line.split(',')[0].strip() for line in file]
 
     random.shuffle(all_games)
-    games = all_games[:10000]  # Sample 50000 games for processing
+    games = all_games[:100]  # Sample 10000 games for processing
 
-    labels = prepare_labels(games)
-    all_results = process_all_points(model, games, tokenizer, device, labels)
+    print("Preparing partial games and labels...")
+    partial_games, labels = prepare_partial_games_and_labels(games)
+    print(f"Total number of partial games: {len(partial_games)}")
+    print(f"Shape of labels array: {labels.shape}")
+
+    # Print all partial games
+    # print_all_partial_games(partial_games)
+
+    all_results = process_all_points(model, partial_games, tokenizer, device, labels)
     
     if all_results:
         generate_graphs(all_results)
