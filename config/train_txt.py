@@ -19,7 +19,7 @@ block_size = 35  # context of up to 1023 tokens (because dataset block size is 1
 # baby GPT model :)
 n_layer = 8
 n_head = 2
-n_embd = 64
+n_embd = 16
 dropout = 0.0
 
 learning_rate = 3e-4
