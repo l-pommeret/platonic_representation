@@ -81,4 +81,16 @@ To run the linear probes layer by layer (see graphs in /assets), you can run:
 python probing_txt.py
 ```
 
+### Probing layer by layer for img
+
+```bash
+python probing_img.py
+```
+
+### Various metrics for PRH (see Isola et al. 2024)
+
+```bash
+python prh.py
+```
+
 This project is currently under development. Should you have any questions, please don't hesitate to contact me!
