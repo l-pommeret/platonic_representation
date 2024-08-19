@@ -113,14 +113,14 @@ def compare_activations(img_activations, txt_activations):
         
         for metric in metrics:
             if metric in ['cycle_knn', 'mutual_knn']:
-                result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat), topk=10)
+                result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat), topk=5)
             elif metric == 'cka':
                 result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat))
             elif metric == 'svcca':
                 # Calculer le nombre maximum de composants pour SVCCA
                 max_components = min(img_flat.shape[0], img_flat.shape[1], txt_flat.shape[1])
                 # Limiter le nombre de composants à une valeur raisonnable (par exemple, 100)
-                n_components = min(100, max_components)
+                n_components = min(64, max_components)
                 result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat), cca_dim=n_components)
             
             layer_results[metric] = result
@@ -165,7 +165,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     img_model = load_model("out-img-models/ckpt_iter_3000.pt").to(device)
-    txt_model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
+    txt_model = load_model("out-img-models/ckpt_iter_5000.pt").to(device)
     
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row.split(',')[0]}" for row in file]

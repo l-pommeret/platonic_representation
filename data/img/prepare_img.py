@@ -7,7 +7,7 @@ from tqdm import tqdm
 INPUT_DIR = "data/img/files"  # Dossier contenant les images
 TRAIN_OUTPUT = "data/img/train.bin"
 VAL_OUTPUT = "data/img/val.bin"
-TRAIN_RATIO = 0.05
+TRAIN_RATIO = 0.1
 IMAGE_SIZE = 9  # 9x9 pixels
 VECTOR_SIZE = IMAGE_SIZE * IMAGE_SIZE + 1  # +1 pour le token de début
 DTYPE = np.uint8
