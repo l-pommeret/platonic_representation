@@ -34,6 +34,6 @@ def randomize_transformer_weights(model_path, output_path):
     print(f"Modèle avec poids complètement randomisés sauvegardé dans {output_path}")
 
 # Utilisation du script
-model_path = "out-txt-models/ckpt_iter_0.pt"
-output_path = "out-txt-models/ckpt_iter_0_rand.pt"
+model_path = "out-txt-models/ckpt_iter_1700.pt"
+output_path = "out-txt-models/ckpt_iter_1700_rand.pt"
 randomize_transformer_weights(model_path, output_path)
