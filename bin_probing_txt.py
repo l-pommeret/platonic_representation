@@ -300,7 +300,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_6000.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_5000.pt").to(device)
 
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
@@ -311,7 +311,7 @@ def main():
         all_games = [line.split(',')[0].strip() for line in file]
 
     random.shuffle(all_games)
-    games = all_games[:100]  # Sample 10000 games for processing
+    games = all_games[:200]  # Sample 10000 games for processing
 
     print("Preparing partial games and labels...")
     partial_games, labels = prepare_partial_games_and_labels(games)

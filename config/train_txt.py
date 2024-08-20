@@ -17,9 +17,9 @@ batch_size = 2048
 block_size = 35  # context of up to 1023 tokens (because dataset block size is 1024)
 
 # baby GPT model :)
-n_layer = 4
-n_head = 2
-n_embd = 64
+n_layer = 2
+n_head = 1
+n_embd = 256
 dropout = 0.0
 
 learning_rate = 3e-4
