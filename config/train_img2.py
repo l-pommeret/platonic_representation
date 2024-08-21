@@ -1,4 +1,4 @@
-out_dir = "out-img-models"
+out_dir = "out-img2-models"
 eval_interval = 100
 eval_iters = 100
 # I'm not sure what's going on, but when log_interval == 100, the time per iter is inaccurate and much longer than it should be
@@ -11,7 +11,7 @@ wandb_log = True
 wandb_project = "platonic-tic-tac-toe"
 wandb_run_name = "IMG2_2_layer"
 
-dataset = "img"
+dataset = "img2"
 gradient_accumulation_steps = 1
 batch_size = 2048
 block_size = 144  # context of up to 1023 tokens (because dataset block size is 1024)
