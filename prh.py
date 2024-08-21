@@ -85,67 +85,52 @@ def extract_representations(model, games, is_image_model, device, tokenizer=None
                     continue
             
             activations = extract_activations(model, input_tensor)
-            all_activations.append(activations)
+            # Concaténer toutes les activations en un seul vecteur
+            concatenated_activations = np.concatenate([act.flatten() for act in activations.values()])
+            all_activations.append(concatenated_activations)
     
     if not all_activations:
         raise ValueError("No valid activations were generated.")
     
-    return all_activations
+    return np.array(all_activations)
 
 def compare_activations(img_activations, txt_activations):
-    results = {}
+    # Assurez-vous que les deux ensembles d'activations ont le même nombre d'exemples
+    min_games = min(img_activations.shape[0], txt_activations.shape[0])
+    img_activations = img_activations[:min_games]
+    txt_activations = txt_activations[:min_games]
     
-    for layer in img_activations[0].keys():
-        img_layer_activations = np.array([act[layer] for act in img_activations])
-        txt_layer_activations = np.array([act[layer] for act in txt_activations])
+    results = {}
+    metrics = ['cycle_knn', 'mutual_knn', 'cka', 'svcca']
+    
+    for metric in metrics:
+        if metric in ['cycle_knn', 'mutual_knn']:
+            result = AlignmentMetrics.measure(metric, torch.tensor(img_activations), torch.tensor(txt_activations), topk=5)
+        elif metric == 'cka':
+            result = AlignmentMetrics.measure(metric, torch.tensor(img_activations), torch.tensor(txt_activations))
+        elif metric == 'svcca':
+            max_components = min(img_activations.shape[0], img_activations.shape[1], txt_activations.shape[1])
+            n_components = min(64, max_components)
+            result = AlignmentMetrics.measure(metric, torch.tensor(img_activations), torch.tensor(txt_activations), cca_dim=n_components)
         
-        # Ensure the activations have the same shape
-        min_games = min(img_layer_activations.shape[0], txt_layer_activations.shape[0])
-        img_layer_activations = img_layer_activations[:min_games]
-        txt_layer_activations = txt_layer_activations[:min_games]
-        
-        # Flatten the activations
-        img_flat = img_layer_activations.reshape(min_games, -1)
-        txt_flat = txt_layer_activations.reshape(min_games, -1)
-        
-        metrics = ['cycle_knn', 'mutual_knn', 'cka', 'svcca']
-        layer_results = {}
-        
-        for metric in metrics:
-            if metric in ['cycle_knn', 'mutual_knn']:
-                result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat), topk=5)
-            elif metric == 'cka':
-                result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat))
-            elif metric == 'svcca':
-                # Calculer le nombre maximum de composants pour SVCCA
-                max_components = min(img_flat.shape[0], img_flat.shape[1], txt_flat.shape[1])
-                # Limiter le nombre de composants à une valeur raisonnable (par exemple, 100)
-                n_components = min(64, max_components)
-                result = AlignmentMetrics.measure(metric, torch.tensor(img_flat), torch.tensor(txt_flat), cca_dim=n_components)
-            
-            layer_results[metric] = result
-        
-        results[layer] = layer_results
+        results[metric] = result
     
     return results
 
 def generate_graph(results):
-    metrics = list(next(iter(results.values())).keys())
-    layers = list(results.keys())
+    metrics = list(results.keys())
     
-    plt.figure(figsize=(12, 6))
+    plt.figure(figsize=(10, 6))
     
-    for metric in metrics:
-        values = [results[layer][metric] for layer in layers]
-        plt.plot(values, marker='o', label=metric)
+    for i, (metric, value) in enumerate(results.items()):
+        plt.bar(i, value, label=metric)
     
-    plt.xlabel('Layers')
+    plt.xlabel('Metrics')
     plt.ylabel('Metric Value')
-    plt.title('Comparison of Metrics Across Layers')
-    plt.xticks(range(len(layers)), layers, rotation=45, ha='right')
+    plt.title('Comparison of Metrics for All Layers')
+    plt.xticks(range(len(metrics)), metrics, rotation=45, ha='right')
     plt.ylim(0, 1)
     plt.legend()
-    plt.grid(True)
     plt.tight_layout()
     plt.savefig('metrics_comparison.png')
     print("Graph saved as 'metrics_comparison.png'")
@@ -153,11 +138,10 @@ def generate_graph(results):
 def generate_csv(results):
     with open('assets/prh_metrics_comparison.csv', 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        metrics = list(next(iter(results.values())).keys())
-        writer.writerow(['Layer'] + metrics)
+        writer.writerow(['Metric', 'Value'])
         
-        for layer, layer_results in results.items():
-            writer.writerow([layer] + [layer_results[metric] for metric in metrics])
+        for metric, value in results.items():
+            writer.writerow([metric, value])
     
     print("CSV file saved as 'metrics_comparison.csv'")
 
@@ -165,7 +149,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     img_model = load_model("out-img-models/ckpt_iter_3000.pt").to(device)
-    txt_model = load_model("out-img-models/ckpt_iter_5000.pt").to(device)
+    txt_model = load_model("out-txt-models/ckpt_iter_3200.pt").to(device)
     
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row.split(',')[0]}" for row in file]
@@ -182,11 +166,9 @@ def main():
         
         results = compare_activations(img_activations, txt_activations)
         
-        print("Résultats de la comparaison des modèles:")
-        for layer, layer_results in results.items():
-            print(f"\nLayer: {layer}")
-            for metric, value in layer_results.items():
-                print(f"  {metric}: {value}")
+        print("Résultats de la comparaison globale des modèles:")
+        for metric, value in results.items():
+            print(f"  {metric}: {value}")
         
         generate_graph(results)
         generate_csv(results)

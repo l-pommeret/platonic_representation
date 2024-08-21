@@ -9,7 +9,7 @@ always_save_checkpoint = True
 
 wandb_log = True
 wandb_project = "platonic-tic-tac-toe"
-wandb_run_name = "IMG_1_layer"
+wandb_run_name = "IMG_2_layer"
 
 dataset = "img"
 gradient_accumulation_steps = 1

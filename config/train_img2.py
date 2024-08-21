@@ -1,20 +1,20 @@
-out_dir = "out-txt-models"
+out_dir = "out-img-models"
 eval_interval = 100
 eval_iters = 100
 # I'm not sure what's going on, but when log_interval == 100, the time per iter is inaccurate and much longer than it should be
 # when running on multiple GPUs. TODO: investigate
-log_interval = 100  # don't print too too often
+log_interval = 50  # don't print too too often
 
 always_save_checkpoint = True
 
 wandb_log = True
 wandb_project = "platonic-tic-tac-toe"
-wandb_run_name = "TXT_2_layer"
+wandb_run_name = "IMG2_2_layer"
 
-dataset = "txt"
+dataset = "img"
 gradient_accumulation_steps = 1
 batch_size = 2048
-block_size = 35  # context of up to 1023 tokens (because dataset block size is 1024)
+block_size = 144  # context of up to 1023 tokens (because dataset block size is 1024)
 
 # baby GPT model :)
 n_layer = 2
