@@ -1,4 +1,4 @@
-out_dir = "out-img2-models"
+out_dir = "out-gif-models"
 eval_interval = 100
 eval_iters = 100
 # I'm not sure what's going on, but when log_interval == 100, the time per iter is inaccurate and much longer than it should be
@@ -9,12 +9,12 @@ always_save_checkpoint = True
 
 wandb_log = True
 wandb_project = "platonic-tic-tac-toe"
-wandb_run_name = "IMG2_2_layer"
+wandb_run_name = "GIF2_2_layer"
 
-dataset = "img2"
+dataset = "gif"
 gradient_accumulation_steps = 1
 batch_size = 2048
-block_size = 82  # context of up to 1023 tokens (because dataset block size is 1024)
+block_size = 144  # context of up to 1023 tokens (because dataset block size is 1024)
 
 # baby GPT model :)
 n_layer = 2
