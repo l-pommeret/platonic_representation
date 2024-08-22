@@ -15,7 +15,7 @@ def create_board_image(move, player, size=3):
     draw.point((col, row), fill=color)
     return img
 
-def generate_game_gifs(csv_file, output_prefix, max_games=5000):
+def generate_game_gifs(csv_file, output_prefix, max_games=50000):
     with open(csv_file, 'r') as file:
         reader = csv.reader(file)
         next(reader)  # Ignorer l'en-tête

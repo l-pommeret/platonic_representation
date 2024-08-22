@@ -7,7 +7,7 @@ from tqdm import tqdm
 INPUT_DIR = "data/gif/files"  # Dossier contenant les GIFs
 TRAIN_OUTPUT = "data/gif/train.bin"
 VAL_OUTPUT = "data/gif/val.bin"
-TRAIN_RATIO = 0.1
+TRAIN_RATIO = 0.9
 FRAME_SIZE = 3  # 3x3 pixels par frame
 NUM_FRAMES = 9  # Nombre de frames par GIF
 VECTOR_SIZE = FRAME_SIZE * FRAME_SIZE * NUM_FRAMES + 1  # +1 pour le token de début
