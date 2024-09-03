@@ -326,7 +326,7 @@ def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-gif-models/ckpt_iter_3300.pt").to(device)
+    model = load_model("out-gif-models/ckpt_iter_4000.pt").to(device)
 
     # Load and sample GIFs
     gif_dir = "data/gif/files"

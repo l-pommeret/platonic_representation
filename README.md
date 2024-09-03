@@ -94,3 +94,5 @@ python prh.py
 ```
 
 This project is currently under development. Should you have any questions, please don't hesitate to contact me!
+
+luc dot pommeret at etu dot u-paris dot fr
