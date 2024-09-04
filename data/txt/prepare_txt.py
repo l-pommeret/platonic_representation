@@ -8,14 +8,14 @@ import chardet
 INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
-TRAIN_RATIO = 0.1
-VECTOR_SIZE = 36
+TRAIN_RATIO = 0.9  # Modifié pour avoir 90% des données dans l'ensemble d'entraînement
+VECTOR_SIZE = 38
 DTYPE = np.uint8
 
 # Dictionnaire de conversion
 META = {
-    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, '/': 8, '-': 9, '\n': 10},
-    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: '/', 9: '-', 10: '\n'}
+    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, 'x': 8, 'o': 9, 'n': 10},
+    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: 'x', 9: 'o', 10: 'n'}
 }
 
 def detect_file_encoding(file_path):
@@ -26,9 +26,15 @@ def detect_file_encoding(file_path):
 
 def load_csv_data(file_path, encoding):
     try:
-        data = pd.read_csv(file_path, encoding=encoding, usecols=[0], header=None)
-        data.columns = ['transcript']
-        data['transcript'] = ';' + data['transcript']
+        # Lire les deux premières colonnes du CSV
+        data = pd.read_csv(file_path, encoding=encoding, usecols=[0, 1], header=None)
+        
+        # Renommer les colonnes
+        data.columns = ['transcript', 'result']
+        
+        # Combiner les colonnes avec un point-virgule
+        data['combined'] = ';' + data['transcript'] + data['result']
+        
         return data
     except UnicodeDecodeError:
         print(f"Échec de lecture avec l'encodage : {encoding}")
@@ -43,7 +49,7 @@ def process_line(line, meta=META, vector_size=VECTOR_SIZE):
     return vector
 
 def process_data(data):
-    return np.array([process_line(row['transcript']) for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes")])
+    return np.array([process_line(row['combined']) for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes")])
 
 def save_data(data, train_ratio, train_file, val_file):
     split_index = int(len(data) * train_ratio)

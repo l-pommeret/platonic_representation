@@ -1,0 +1,16 @@
+Probe Point,Average Validation Accuracy
+embedding,0.7994999999999999
+layer0_pre_attn_norm,0.7994999999999999
+layer0_attn,0.7995000000000001
+layer0_post_attn,0.8074999999999999
+layer0_pre_ffn_norm,0.8055000000000001
+layer0_mlp_fc,0.8275
+layer0_mlp_proj,0.8085000000000001
+layer1_pre_attn_norm,0.8019999999999999
+layer1_attn,0.755
+layer1_post_attn,0.798
+layer1_pre_ffn_norm,0.8089999999999999
+layer1_mlp_fc,0.804
+layer1_mlp_proj,0.7930000000000001
+final_ln,0.8105
+lm_head,0.7785

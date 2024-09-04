@@ -5,15 +5,14 @@ import numpy as np
 from sklearn.model_selection import KFold
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
 import pickle
 from tqdm import tqdm
-import os
-import traceback
 import random
 import matplotlib.pyplot as plt
 import csv
 import seaborn as sns
-
+import os
 from extract_features import load_model, tokenize_and_pad
 
 class SparseAutoencoder(nn.Module):
@@ -26,6 +25,7 @@ class SparseAutoencoder(nn.Module):
         encoded = torch.relu(self.encoder(x))
         decoded = self.decoder(encoded)
         return encoded, decoded
+
 
 def get_probe_points(model):
     """Dynamically generate probe points based on model architecture."""
@@ -110,14 +110,28 @@ def prepare_labels(games):
             labels.append(0)  # Win (for either X or O)
     return np.array(labels)
 
+def prepare_balanced_dataset(games, labels, n_samples=1000):
+    """Prepare a balanced dataset with equal number of wins and draws."""
+    win_indices = np.where(labels == 0)[0]
+    draw_indices = np.where(labels == 1)[0]
+    
+    n_samples_per_class = min(len(win_indices), len(draw_indices), n_samples // 2)
+    
+    balanced_win_indices = np.random.choice(win_indices, n_samples_per_class, replace=False)
+    balanced_draw_indices = np.random.choice(draw_indices, n_samples_per_class, replace=False)
+    
+    balanced_indices = np.concatenate([balanced_win_indices, balanced_draw_indices])
+    np.random.shuffle(balanced_indices)
+    
+    return [games[i] for i in balanced_indices], labels[balanced_indices]
+
 def train_and_evaluate_sae(activations, labels, encoding_dim, device, n_splits=5, epochs=100, batch_size=32):
-    """Train and evaluate Sparse Autoencoder for probing."""
+    """Train Sparse Autoencoder and evaluate using Logistic Regression."""
     results = []
     
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
 
-    # Normalisation des activations
     scaler = StandardScaler()
     activations_normalized = scaler.fit_transform(activations)
 
@@ -137,19 +151,24 @@ def train_and_evaluate_sae(activations, labels, encoding_dim, device, n_splits=5
                 batch = torch.FloatTensor(X_train[i:i+batch_size]).to(device)
                 optimizer.zero_grad()
                 encoded, decoded = sae(batch)
-                loss = criterion(decoded, batch) + 1 * torch.sum(torch.abs(encoded))  # L1 regularization
+                loss = criterion(decoded, batch) + 0.0001 * torch.sum(torch.abs(encoded))  # L1 regularization
                 loss.backward()
                 optimizer.step()
 
-        # Evaluate
+        # Evaluate using Logistic Regression
         sae.eval()
         with torch.no_grad():
             train_encoded, _ = sae(torch.FloatTensor(X_train).to(device))
             val_encoded, _ = sae(torch.FloatTensor(X_val).to(device))
 
-        # Use mean activation of encoded layer as prediction
-        train_pred = (train_encoded.mean(dim=1) > 0.5).float().cpu().numpy()
-        val_pred = (val_encoded.mean(dim=1) > 0.5).float().cpu().numpy()
+        train_encoded = train_encoded.cpu().numpy()
+        val_encoded = val_encoded.cpu().numpy()
+
+        clf = LogisticRegression(random_state=42, max_iter=1000)
+        clf.fit(train_encoded, y_train)
+
+        train_pred = clf.predict(train_encoded)
+        val_pred = clf.predict(val_encoded)
 
         train_accuracy = accuracy_score(y_train, train_pred)
         val_accuracy = accuracy_score(y_val, val_pred)
@@ -224,7 +243,7 @@ def generate_graphs(all_results):
     plt.ylim(0.45, 1)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('assets/txt_accuracy_across_probe_points_sae.png')
+    plt.savefig('accuracy_across_probe_points_sae.png')
     plt.close()
 
     # Generate CSV file
@@ -238,23 +257,22 @@ def generate_graphs(all_results):
     print("CSV file 'validation_accuracy_sae.csv' has been generated.")
 
 def main():
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = load_model("out-txt-models/ckpt_iter_3200.pt").to(device)
+    model = load_model("out-txt-models/ckpt_iter_3200_rand.pt").to(device)
 
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
     tokenizer = lambda x: vocab_info['stoi'].get(x, vocab_info['stoi'][';'])
 
-    # Load and sample games
+    # Load and prepare balanced dataset
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row}" for row in file]
 
-    random.shuffle(all_games)
-    games = all_games[:5000]  # Sample 5000 games for processing
+    labels = prepare_labels(all_games)
+    games, labels = prepare_balanced_dataset(all_games, labels, n_samples=2000)
 
-    labels = prepare_labels(games)
     all_results = process_all_points(model, games, tokenizer, device, labels)
     
     if all_results:

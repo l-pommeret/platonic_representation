@@ -18,13 +18,13 @@ def generate_all_games():
     
     def backtrack(board, moves, turn):
         if is_winner(board, 'X'):
-            all_games.append((moves, '0-1'))
+            all_games.append((moves, 'x'))
             return
         if is_winner(board, 'O'):
-            all_games.append((moves, '1-0'))
+            all_games.append((moves, 'n'))
             return
         if len(moves) == 9:
-            all_games.append((moves, '1/2-1/2'))
+            all_games.append((moves, 'n'))
             return
         
         player = 'X' if turn % 2 == 0 else 'O'
@@ -46,7 +46,7 @@ all_games = generate_all_games()
 random.shuffle(all_games)
 
 # Créer un fichier CSV avec toutes les parties mélangées
-csv_filename = 'data/all_tic_tac_toe_games.csv'
+csv_filename = 'data/txt/all_tic_tac_toe_games.csv'
 with open(csv_filename, 'w', newline='') as csvfile:
     csv_writer = csv.writer(csvfile)
     
