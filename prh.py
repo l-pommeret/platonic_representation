@@ -9,6 +9,15 @@ from data.img.prepare_img import load_and_process_image
 from alignment_metrics import AlignmentMetrics
 
 def process_move(move):
+    """
+    Processes a move string to ensure it's a valid tic-tac-toe move.
+
+    Args:
+        move (str): A string representing a move, e.g., 'A1', 'B3'.
+
+    Returns:
+        str: The original move string if it's valid, otherwise None.
+    """
     if len(move) != 3:
         return None
     try:
@@ -19,6 +28,7 @@ def process_move(move):
     except ValueError:
         pass
     return None
+
 
 def extract_activations(model, input_tensor):
     activations = {}
@@ -59,12 +69,12 @@ def extract_representations(model, games, is_image_model, device, tokenizer=None
         with torch.no_grad():
             if is_image_model:
                 print(f"Processing game {i}: {game}")
-                moves = game[1:].split()  # Supprimer le point-virgule initial
+                moves = game[1:].split()  # Remove the leading semicolon
                 valid_moves = [process_move(move) for move in moves if process_move(move) is not None]
                 
                 if len(valid_moves) != len(moves):
                     print(f"Warning: Game {i} has invalid moves. Original: {moves}, Processed: {valid_moves}")
-                    continue  # Passer à la partie suivante si des mouvements sont invalides
+                    continue  # Skip to the next game if there are invalid moves
                 
                 try:
                     img = create_board_image(valid_moves)
@@ -85,7 +95,7 @@ def extract_representations(model, games, is_image_model, device, tokenizer=None
                     continue
             
             activations = extract_activations(model, input_tensor)
-            # Concaténer toutes les activations en un seul vecteur
+            # Concatenate all activations into a single vector
             concatenated_activations = np.concatenate([act.flatten() for act in activations.values()])
             all_activations.append(concatenated_activations)
     
@@ -95,7 +105,7 @@ def extract_representations(model, games, is_image_model, device, tokenizer=None
     return np.array(all_activations)
 
 def compare_activations(img_activations, txt_activations):
-    # Assurez-vous que les deux ensembles d'activations ont le même nombre d'exemples
+    # Ensure both sets of activations have the same number of samples
     min_games = min(img_activations.shape[0], txt_activations.shape[0])
     img_activations = img_activations[:min_games]
     txt_activations = txt_activations[:min_games]
@@ -136,6 +146,11 @@ def generate_graph(results):
     print("Graph saved as 'metrics_comparison.png'")
 
 def generate_csv(results):
+    """Generates a CSV file containing the comparison metrics.
+
+    Args:
+        results (dict): A dictionary where keys are metric names and values are metric values.
+    """
     with open('assets/prh_metrics_comparison.csv', 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
         writer.writerow(['Metric', 'Value'])
@@ -145,8 +160,10 @@ def generate_csv(results):
     
     print("CSV file saved as 'metrics_comparison.csv'")
 
+
 def main():
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
+
     
     img_model = load_model("out-img-models/ckpt_iter_3000.pt").to(device)
     txt_model = load_model("out-txt-models/ckpt_iter_3200.pt").to(device)
@@ -154,7 +171,7 @@ def main():
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
         all_games = [f";{row.split(',')[0]}" for row in file]
     
-    games = all_games[:100]  # Échantillon de 100 jeux pour le test
+    games = all_games[:100]  # Sample of 100 games for testing
     
     with open('data/txt/meta.pkl', 'rb') as f:
         vocab_info = pickle.load(f)
@@ -166,7 +183,7 @@ def main():
         
         results = compare_activations(img_activations, txt_activations)
         
-        print("Résultats de la comparaison globale des modèles:")
+        print("Global model comparison results:")
         for metric, value in results.items():
             print(f"  {metric}: {value}")
         
@@ -174,7 +191,7 @@ def main():
         generate_csv(results)
         
     except Exception as e:
-        print(f"Une erreur est survenue lors de la comparaison des modèles: {str(e)}")
+        print(f"An error occurred while comparing the models: {str(e)}")
         import traceback
         traceback.print_exc()
 

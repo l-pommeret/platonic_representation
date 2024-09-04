@@ -1,9 +1,9 @@
 import torch
+import torch.nn as nn
+import torch.optim as optim
 import numpy as np
 from sklearn.model_selection import KFold
-from sklearn.svm import LinearSVC
-from sklearn.metrics import accuracy_score, confusion_matrix
-from sklearn.multiclass import OneVsRestClassifier
+from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import StandardScaler
 import pickle
 from tqdm import tqdm
@@ -15,6 +15,17 @@ import csv
 import seaborn as sns
 
 from extract_features import load_model, tokenize_and_pad
+
+class SparseAutoencoder(nn.Module):
+    def __init__(self, input_dim, encoding_dim):
+        super(SparseAutoencoder, self).__init__()
+        self.encoder = nn.Linear(input_dim, encoding_dim)
+        self.decoder = nn.Linear(encoding_dim, input_dim)
+    
+    def forward(self, x):
+        encoded = torch.relu(self.encoder(x))
+        decoded = self.decoder(encoded)
+        return encoded, decoded
 
 def get_probe_points(model):
     """Dynamically generate probe points based on model architecture."""
@@ -89,22 +100,20 @@ def extract_activations_all_points(model, games, tokenizer, device, batch_size=4
     return all_activations
 
 def prepare_labels(games):
-    """Prepare labels for the tic-tac-toe game results."""
+    """Prepare labels for win/draw classification."""
     labels = []
     for game in games:
         result = game.split(',')[1].strip()
-        if result == '1-0':
-            labels.append(0)  # X wins
-        elif result == '0-1':
-            labels.append(1)  # O wins
+        if result == '1/2-1/2':
+            labels.append(1)  # Draw
         else:
-            labels.append(2)  # Draw
+            labels.append(0)  # Win (for either X or O)
     return np.array(labels)
 
-def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
-    """Train and evaluate probing classifiers using LinearSVC."""
-    n_splits = 5
-
+def train_and_evaluate_sae(activations, labels, encoding_dim, device, n_splits=5, epochs=100, batch_size=32):
+    """Train and evaluate Sparse Autoencoder for probing."""
+    results = []
+    
     if activations.ndim == 3:
         activations = activations.mean(axis=1)
 
@@ -112,37 +121,48 @@ def train_and_evaluate_probing_classifiers(activations, labels, max_iter=1000):
     scaler = StandardScaler()
     activations_normalized = scaler.fit_transform(activations)
 
-    base_clf = LinearSVC(max_iter=max_iter, dual=False)
-    clf = OneVsRestClassifier(base_clf)
-
     kf = KFold(n_splits=n_splits, shuffle=True, random_state=42)
-    train_metrics = []
-    val_metrics = []
-    confusion_matrices = []
-
+    
     for train_index, val_index in kf.split(activations_normalized):
         X_train, X_val = activations_normalized[train_index], activations_normalized[val_index]
         y_train, y_val = labels[train_index], labels[val_index]
 
-        clf.fit(X_train, y_train)
+        sae = SparseAutoencoder(X_train.shape[1], encoding_dim).to(device)
+        criterion = nn.MSELoss()
+        optimizer = optim.Adam(sae.parameters())
 
-        train_pred = clf.predict(X_train)
-        val_pred = clf.predict(X_val)
+        # Train SAE
+        for epoch in range(epochs):
+            for i in range(0, len(X_train), batch_size):
+                batch = torch.FloatTensor(X_train[i:i+batch_size]).to(device)
+                optimizer.zero_grad()
+                encoded, decoded = sae(batch)
+                loss = criterion(decoded, batch) + 1 * torch.sum(torch.abs(encoded))  # L1 regularization
+                loss.backward()
+                optimizer.step()
 
-        train_metrics.append(accuracy_score(y_train, train_pred))
-        val_metrics.append(accuracy_score(y_val, val_pred))
-        confusion_matrices.append(confusion_matrix(y_val, val_pred))
+        # Evaluate
+        sae.eval()
+        with torch.no_grad():
+            train_encoded, _ = sae(torch.FloatTensor(X_train).to(device))
+            val_encoded, _ = sae(torch.FloatTensor(X_val).to(device))
 
-    results = {
-        'train_accuracy': np.mean(train_metrics),
-        'val_accuracy': np.mean(val_metrics),
-        'confusion_matrix': np.mean(confusion_matrices, axis=0)
-    }
+        # Use mean activation of encoded layer as prediction
+        train_pred = (train_encoded.mean(dim=1) > 0.5).float().cpu().numpy()
+        val_pred = (val_encoded.mean(dim=1) > 0.5).float().cpu().numpy()
+
+        train_accuracy = accuracy_score(y_train, train_pred)
+        val_accuracy = accuracy_score(y_val, val_pred)
+
+        results.append({
+            'train_accuracy': train_accuracy,
+            'val_accuracy': val_accuracy
+        })
 
     return results
 
-def process_all_points(model, games, tokenizer, device, labels, max_iter=1000):
-    """Process all probe points: extract activations and train probing classifiers."""
+def process_all_points(model, games, tokenizer, device, labels, encoding_dim=64):
+    """Process all probe points: extract activations and train SAE for probing."""
     try:
         print("Starting to process all probe points")
         all_activations = extract_activations_all_points(model, games, tokenizer, device)
@@ -156,11 +176,14 @@ def process_all_points(model, games, tokenizer, device, labels, max_iter=1000):
             print(f"Processing probe point: {point}")
             print(f"Activations shape: {activations.shape}")
 
-            results = train_and_evaluate_probing_classifiers(activations, labels, max_iter=max_iter)
+            results = train_and_evaluate_sae(activations, labels, encoding_dim, device)
+
+            avg_train_accuracy = np.mean([result['train_accuracy'] for result in results])
+            avg_val_accuracy = np.mean([result['val_accuracy'] for result in results])
 
             print(f"\n{point} Summary:")
-            print(f"  Average Train Accuracy: {results['train_accuracy']:.4f}")
-            print(f"  Average Validation Accuracy: {results['val_accuracy']:.4f}")
+            print(f"  Average Train Accuracy: {avg_train_accuracy:.4f}")
+            print(f"  Average Validation Accuracy: {avg_val_accuracy:.4f}")
             print()
 
             all_results[point] = results
@@ -180,7 +203,7 @@ def generate_graphs(all_results):
     
     # Plotting average accuracy across probe points
     plt.figure(figsize=(15, 8))
-    avg_accuracies = [results['val_accuracy'] for results in all_results.values()]
+    avg_accuracies = [np.mean([result['val_accuracy'] for result in results]) for results in all_results.values()]
 
     # Create custom x-axis labels
     x_labels = []
@@ -196,35 +219,23 @@ def generate_graphs(all_results):
     plt.plot(x_ticks, avg_accuracies, marker='o')
     plt.xlabel('Probe Point')
     plt.ylabel('Average Validation Accuracy')
-    plt.title('Average Accuracy Across Probe Points (Linear Probing)')
+    plt.title('Average Accuracy Across Probe Points (SAE Probing)')
     plt.xticks(x_ticks, x_labels, rotation=45, ha='right')
-    plt.ylim(0.3, 1)
+    plt.ylim(0.45, 1)
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('assets/txt_accuracy_across_probe_points.png')
+    plt.savefig('assets/txt_accuracy_across_probe_points_sae.png')
     plt.close()
 
     # Generate CSV file
-    with open('validation_accuracy.csv', 'w', newline='') as csvfile:
+    with open('validation_accuracy_sae.csv', 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['Probe Point', 'Validation Accuracy'])
+        writer.writerow(['Probe Point', 'Average Validation Accuracy'])
         for point, results in all_results.items():
-            writer.writerow([point, results['val_accuracy']])
+            avg_accuracy = np.mean([result['val_accuracy'] for result in results])
+            writer.writerow([point, avg_accuracy])
 
-    print("CSV file 'validation_accuracy.csv' has been generated.")
-
-    # Generate confusion matrices
-    os.makedirs('assets/confusion_matrices', exist_ok=True)
-    for point, results in all_results.items():
-        plt.figure(figsize=(8, 6))
-        sns.heatmap(results['confusion_matrix'], annot=True, fmt='d', cmap='Blues')
-        plt.title(f'Confusion Matrix - {point}')
-        plt.xlabel('Predicted Label')
-        plt.ylabel('True Label')
-        plt.savefig(f'assets/confusion_matrices/confusion_matrix_{point}.png')
-        plt.close()
-
-    print("Confusion matrices have been saved in the assets/confusion_matrices directory.")
+    print("CSV file 'validation_accuracy_sae.csv' has been generated.")
 
 def main():
     device = torch.device("cuda:0" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -238,7 +249,7 @@ def main():
 
     # Load and sample games
     with open("data/txt/all_tic_tac_toe_games.csv", 'r') as file:
-        all_games = [row for row in file]
+        all_games = [f";{row}" for row in file]
 
     random.shuffle(all_games)
     games = all_games[:5000]  # Sample 5000 games for processing
