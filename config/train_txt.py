@@ -14,7 +14,7 @@ wandb_run_name = "TXT_2_layer"
 dataset = "txt"
 gradient_accumulation_steps = 1
 batch_size = 2048
-block_size = 38  # context of up to 1023 tokens (because dataset block size is 1024)
+block_size = 37  # context of up to 1023 tokens (because dataset block size is 1024)
 
 # baby GPT model :)
 n_layer = 2
