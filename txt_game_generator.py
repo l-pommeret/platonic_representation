@@ -55,7 +55,7 @@ with open(csv_filename, 'w', newline='') as csvfile:
     
     # Écrire toutes les parties
     for game in all_games:
-        csv_writer.writerow([' '.join(game)])
+        csv_writer.writerow([''.join(game)])
 
 print(f"Toutes les parties ont été générées, mélangées et sauvegardées dans '{csv_filename}'")
 print(f"Nombre total de parties : {len(all_games)}")
