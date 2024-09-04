@@ -8,8 +8,8 @@ import chardet
 INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
-TRAIN_RATIO = 0.9  # Modifié pour avoir 90% des données dans l'ensemble d'entraînement
-VECTOR_SIZE = 38
+TRAIN_RATIO = 0.9
+VECTOR_SIZE = 37
 DTYPE = np.uint8
 
 # Dictionnaire de conversion
@@ -26,15 +26,9 @@ def detect_file_encoding(file_path):
 
 def load_csv_data(file_path, encoding):
     try:
-        # Lire les deux premières colonnes du CSV
         data = pd.read_csv(file_path, encoding=encoding, usecols=[0, 1], header=None)
-        
-        # Renommer les colonnes
         data.columns = ['transcript', 'result']
-        
-        # Combiner les colonnes avec un point-virgule
         data['combined'] = ';' + data['transcript'] + data['result']
-        
         return data
     except UnicodeDecodeError:
         print(f"Échec de lecture avec l'encodage : {encoding}")
@@ -48,10 +42,14 @@ def process_line(line, meta=META, vector_size=VECTOR_SIZE):
         vector[i] = meta['stoi'].get(char, 1)
     return vector
 
-def process_data(data):
+def process_data(input_file, encoding):
+    data = load_csv_data(input_file, encoding)
+    if data is None:
+        raise ValueError("Impossible de lire le fichier avec l'encodage détecté.")
     return np.array([process_line(row['combined']) for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes")])
 
 def save_data(data, train_ratio, train_file, val_file):
+    np.random.shuffle(data)
     split_index = int(len(data) * train_ratio)
     train_data = data[:split_index]
     val_data = data[split_index:]
@@ -84,16 +82,7 @@ def main():
     encoding = detect_file_encoding(INPUT_FILE)
     print(f"Encodage détecté : {encoding}")
     
-    data = load_csv_data(INPUT_FILE, encoding)
-    if data is None:
-        raise ValueError("Impossible de lire le fichier avec l'encodage détecté.")
-    
-    print("Structure du DataFrame:")
-    print(data.info())
-    print("\nPremières lignes du DataFrame:")
-    print(data.head())
-    
-    processed_data = process_data(data)
+    processed_data = process_data(INPUT_FILE, encoding)
     save_data(processed_data, TRAIN_RATIO, TRAIN_OUTPUT, VAL_OUTPUT)
     
     print("\nAperçu des données d'entraînement:")
