@@ -8,7 +8,7 @@ import chardet
 INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
-TRAIN_RATIO = 0.9
+TRAIN_RATIO = 0.1
 VECTOR_SIZE = 37
 DTYPE = np.uint8
 
@@ -26,10 +26,12 @@ def detect_file_encoding(file_path):
 
 def load_csv_data(file_path, encoding):
     try:
+        # Lire les deux premières colonnes du CSV
         data = pd.read_csv(file_path, encoding=encoding, usecols=[0, 1], header=None)
-        data.columns = ['transcript', 'result']
-        data['combined'] = ';' + data['transcript'] + data['result']
-        return data
+        data.columns = ['col1', 'col2']
+        # Concaténer les deux colonnes
+        data['transcript'] = ';' + data['col1'].astype(str) + data['col2'].astype(str)
+        return data[['transcript']]
     except UnicodeDecodeError:
         print(f"Échec de lecture avec l'encodage : {encoding}")
         return None
@@ -39,17 +41,20 @@ def process_line(line, meta=META, vector_size=VECTOR_SIZE):
     for i, char in enumerate(str(line).strip()):
         if i >= vector_size:
             break
-        vector[i] = meta['stoi'].get(char, 1)
+        if char == '\n':
+            vector[i] = meta['stoi']['n']
+        elif char == '-':
+            vector[i] = meta['stoi']['x']  # Remplacer '-' par 'x'
+        elif char == '/':
+            vector[i] = meta['stoi'][' ']  # Remplacer '/' par un espace
+        else:
+            vector[i] = meta['stoi'].get(char, 1)
     return vector
 
-def process_data(input_file, encoding):
-    data = load_csv_data(input_file, encoding)
-    if data is None:
-        raise ValueError("Impossible de lire le fichier avec l'encodage détecté.")
-    return np.array([process_line(row['combined']) for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes")])
+def process_data(data):
+    return np.array([process_line(row['transcript']) for _, row in tqdm(data.iterrows(), total=len(data), desc="Traitement des lignes")])
 
 def save_data(data, train_ratio, train_file, val_file):
-    np.random.shuffle(data)
     split_index = int(len(data) * train_ratio)
     train_data = data[:split_index]
     val_data = data[split_index:]
@@ -63,7 +68,7 @@ def save_data(data, train_ratio, train_file, val_file):
     print(f"Nombre d'exemples d'entraînement : {len(train_data)}")
     print(f"Nombre d'exemples de validation : {len(val_data)}")
 
-def load_and_print_batches(filename, start_batch=0, end_batch=10, batch_size=VECTOR_SIZE):
+def load_and_print_batches(filename, start_batch=1000, end_batch=1010, batch_size=VECTOR_SIZE):
     data = np.fromfile(filename, dtype=DTYPE)
     total_batches = len(data) // batch_size
     start_batch = max(0, min(start_batch, total_batches - 1))
@@ -82,7 +87,16 @@ def main():
     encoding = detect_file_encoding(INPUT_FILE)
     print(f"Encodage détecté : {encoding}")
     
-    processed_data = process_data(INPUT_FILE, encoding)
+    data = load_csv_data(INPUT_FILE, encoding)
+    if data is None:
+        raise ValueError("Impossible de lire le fichier avec l'encodage détecté.")
+    
+    print("Structure du DataFrame:")
+    print(data.info())
+    print("\nPremières lignes du DataFrame:")
+    print(data.head())
+    
+    processed_data = process_data(data)
     save_data(processed_data, TRAIN_RATIO, TRAIN_OUTPUT, VAL_OUTPUT)
     
     print("\nAperçu des données d'entraînement:")
