@@ -9,13 +9,13 @@ INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
 TRAIN_RATIO = 0.1
-VECTOR_SIZE = 36
+VECTOR_SIZE = 38
 DTYPE = np.uint8
 
 # Dictionnaire de conversion
 META = {
-    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, '/': 8, '-': 9, '\n': 10},
-    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: '/', 9: '-', 10: '\n'}
+    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, 'x': 8, 'o': 9, 'n': 10},
+    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: 'x', 9: 'o', 10: 'n'}
 }
 
 def detect_file_encoding(file_path):
