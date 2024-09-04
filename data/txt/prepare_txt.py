@@ -9,7 +9,7 @@ INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
 TRAIN_RATIO = 0.1
-VECTOR_SIZE = 39
+VECTOR_SIZE = 38
 DTYPE = np.uint8
 
 # Dictionnaire de conversion

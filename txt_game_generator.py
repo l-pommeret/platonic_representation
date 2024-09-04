@@ -18,13 +18,13 @@ def generate_all_games():
     
     def backtrack(board, moves, turn):
         if is_winner(board, 'X'):
-            all_games.append(moves + ['x'])
+            all_games.append(moves + ['x '])
             return
         if is_winner(board, 'O'):
-            all_games.append(moves + ['o'])
+            all_games.append(moves + ['o '])
             return
         if len(moves) == 9:
-            all_games.append(moves + ['n'])
+            all_games.append(moves + ['n '])
             return
         
         player = 'X' if turn % 2 == 0 else 'O'
