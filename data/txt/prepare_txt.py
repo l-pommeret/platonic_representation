@@ -9,13 +9,13 @@ INPUT_FILE = "data/txt/all_tic_tac_toe_games.csv"
 TRAIN_OUTPUT = "data/txt/train.bin"
 VAL_OUTPUT = "data/txt/val.bin"
 TRAIN_RATIO = 0.1
-VECTOR_SIZE = 37
+VECTOR_SIZE = 36
 DTYPE = np.uint8
 
 # Dictionnaire de conversion
 META = {
-    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, 'x': 8, 'o': 9, 'n': 10},
-    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: 'x', 9: 'o', 10: 'n'}
+    'stoi': {';': 0, ' ': 1, '0': 2, '1': 3, '2': 4, '3': 5, 'X': 6, 'O': 7, '/': 8, '-': 9, '\n': 10},
+    'itos': {0: ';', 1: ' ', 2: '0', 3: '1', 4: '2', 5: '3', 6: 'X', 7: 'O', 8: '/', 9: '-', 10: '\n'}
 }
 
 def detect_file_encoding(file_path):
@@ -26,12 +26,10 @@ def detect_file_encoding(file_path):
 
 def load_csv_data(file_path, encoding):
     try:
-        # Lire les deux premières colonnes du CSV
-        data = pd.read_csv(file_path, encoding=encoding, usecols=[0, 1], header=None)
-        data.columns = ['col1', 'col2']
-        # Concaténer les deux colonnes
-        data['transcript'] = ';' + data['col1'].astype(str) + data['col2'].astype(str)
-        return data[['transcript']]
+        data = pd.read_csv(file_path, encoding=encoding, usecols=[0], header=None)
+        data.columns = ['transcript']
+        data['transcript'] = ';' + data['transcript']
+        return data
     except UnicodeDecodeError:
         print(f"Échec de lecture avec l'encodage : {encoding}")
         return None
@@ -41,14 +39,7 @@ def process_line(line, meta=META, vector_size=VECTOR_SIZE):
     for i, char in enumerate(str(line).strip()):
         if i >= vector_size:
             break
-        if char == '\n':
-            vector[i] = meta['stoi']['n']
-        elif char == '-':
-            vector[i] = meta['stoi']['x']  # Remplacer '-' par 'x'
-        elif char == '/':
-            vector[i] = meta['stoi'][' ']  # Remplacer '/' par un espace
-        else:
-            vector[i] = meta['stoi'].get(char, 1)
+        vector[i] = meta['stoi'].get(char, 1)
     return vector
 
 def process_data(data):
@@ -68,7 +59,7 @@ def save_data(data, train_ratio, train_file, val_file):
     print(f"Nombre d'exemples d'entraînement : {len(train_data)}")
     print(f"Nombre d'exemples de validation : {len(val_data)}")
 
-def load_and_print_batches(filename, start_batch=1000, end_batch=1010, batch_size=VECTOR_SIZE):
+def load_and_print_batches(filename, start_batch=0, end_batch=10, batch_size=VECTOR_SIZE):
     data = np.fromfile(filename, dtype=DTYPE)
     total_batches = len(data) // batch_size
     start_batch = max(0, min(start_batch, total_batches - 1))
